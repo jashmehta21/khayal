@@ -452,6 +452,7 @@ function showScreen(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
   $("screen-" + name).classList.add("active");
   document.querySelector(`.tab[data-screen="${name}"]`).classList.add("active");
+  if (name !== "thoughts") MapView.stop(); // never animate off-screen
   if (name === "thoughts") refreshThoughts();
   if (name === "todos") renderTodos();
   if (name === "review") startReview();
@@ -706,6 +707,12 @@ async function saveCapture() {
     updateTodayStat();
     updateBadges();
     toast("✦ Khayal saved");
+    // give it a meaning vector in the background so the map stays current
+    if (smartKey()) {
+      embedOne((t.title ? t.title + ". " : "") + t.text)
+        .then(async (vec) => { t.vec = vec; t.vecModel = EMBED_MODEL; await dbPut("thoughts", t); })
+        .catch(() => {});
+    }
   }
   $("transcript").value = "";
   localStorage.removeItem("khayal-draft");
@@ -1484,12 +1491,25 @@ function renderRhythm(counts) {
 }
 
 function refreshThoughts() {
-  const insights = settings.view === "insights";
+  const view = ["list", "map", "insights"].includes(settings.view) ? settings.view : "list";
   document.querySelectorAll(".view-chip").forEach((x) =>
-    x.classList.toggle("active", (x.dataset.view === "insights") === insights));
-  $("listView").hidden = insights;
-  $("insightsView").hidden = !insights;
-  if (insights) renderInsights();
+    x.classList.toggle("active", x.dataset.view === view));
+  $("listView").hidden = view !== "list";
+  $("mapView").hidden = view !== "map";
+  $("insightsView").hidden = view !== "insights";
+  if (view !== "map") MapView.stop();
+  if (view === "insights") renderInsights();
+  else if (view === "map") {
+    $("mapCta").hidden = !!smartKey();
+    MapView.start();
+    // fill in any missing meaning vectors the moment the map is opened
+    if (smartKey() && thoughts.some((t) => !t.vec)) {
+      $("mapStatus").textContent = "Understanding your khayals…";
+      embedMissing((d, tt) => { $("mapStatus").textContent = `Understanding your khayals… ${d}/${tt}`; })
+        .then(({ done }) => { if (done) MapView.rebuild(); else MapView.updateStatus(); })
+        .catch((e) => { $("mapStatus").textContent = e.message; });
+    }
+  }
   else { renderDateBar(); renderList(); }
   moveAllThumbs();
 }
@@ -1512,7 +1532,26 @@ function openDetail(id) {
   $("detailText").value = t.text;
   $("detailMeta").textContent = `Created ${relTime(t.createdAt)} · reviewed ${t.reviewCount || 0}×`;
   updateTierChips();
+  renderRelated(t);
   $("sheetBackdrop").hidden = false;
+}
+
+/* the connections, shown where they're actually useful: on the khayal itself */
+function renderRelated(t) {
+  const wrap = $("relatedWrap"), list = $("relatedList");
+  const hits = relatedTo(t, 4);
+  if (!hits.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  list.innerHTML = hits.map(({ t: o, s }) =>
+    `<button class="related-item" data-id="${o.id}">
+      <span class="rel-bar"><i style="width:${Math.round(Math.min(1, s) * 100)}%"></i></span>
+      <span class="rel-text">
+        <b>${esc(o.title || generateTitle(o.text))}</b>
+        <em>${["Regular", "High", "Core"][o.tier]} · ${relTime(o.createdAt)}</em>
+      </span>
+    </button>`).join("");
+  list.querySelectorAll(".related-item").forEach((el) =>
+    el.addEventListener("click", () => { buzz(8); openDetail(el.dataset.id); }));
 }
 function updateTierChips() {
   document.querySelectorAll(".tier-chip").forEach((c) =>
@@ -1812,6 +1851,96 @@ $("installBtn").addEventListener("click", async () => {
   renderInstallHelp();
 });
 
+/* ================= map controls ================= */
+$("hudClose").addEventListener("click", () => { $("mapHud").hidden = true; });
+$("ctaSettings").addEventListener("click", () => {
+  showScreen("settings");
+  setTimeout(() => $("smartToggle").scrollIntoView({ block: "center", behavior: "smooth" }), 200);
+});
+$("mapRelink").addEventListener("click", async () => {
+  buzz(10);
+  if (smartKey()) {
+    $("mapStatus").textContent = "Reading your khayals…";
+    const { done, total } = await embedMissing((d, t) => {
+      $("mapStatus").textContent = `Understanding your khayals… ${d}/${t}`;
+    }).catch((e) => { toast(e.message); return { done: 0, total: 0 }; });
+    if (done) toast(`Connected ${done} khayal${done > 1 ? "s" : ""}`);
+  }
+  MapView.rebuild();
+});
+
+/* ================= ask ================= */
+function openChat() {
+  $("chatBackdrop").hidden = false;
+  $("chatSub").textContent = smartKey()
+    ? "Answers come only from what you've written."
+    : "Add a free key in Settings to talk. Without one I'll still find the closest khayals.";
+  if (!chatHistory.length) renderChat();
+  setTimeout(() => $("chatInput").focus(), 250);
+}
+function closeChat() { $("chatBackdrop").hidden = true; }
+$("askBtn").addEventListener("click", () => { buzz(8); openChat(); });
+$("chatClose").addEventListener("click", closeChat);
+$("chatBackdrop").addEventListener("click", (e) => { if (e.target === $("chatBackdrop")) closeChat(); });
+
+function renderChat() {
+  const log = $("chatLog");
+  if (!chatHistory.length) {
+    const seeds = ["What have I been thinking about lately?",
+      "What are my recurring themes?", "Summarise my core memories"];
+    log.innerHTML = `<div class="chat-empty">
+      <p>Ask anything about your own thoughts.</p>
+      ${seeds.map((s) => `<button class="chip seed-chip">${esc(s)}</button>`).join("")}
+    </div>`;
+    log.querySelectorAll(".seed-chip").forEach((b) =>
+      b.addEventListener("click", () => { $("chatInput").value = b.textContent; sendChat(); }));
+    return;
+  }
+  log.innerHTML = chatHistory.map((m) => {
+    if (m.role === "you") return `<div class="msg you">${esc(m.text)}</div>`;
+    if (m.role === "thinking") return `<div class="msg bot thinking"><i></i><i></i><i></i></div>`;
+    const cites = (m.sources || []).length
+      ? `<div class="cites">${m.sources.map((s, i) =>
+          `<button class="cite" data-id="${s.id}">[${i + 1}] ${esc((s.title || generateTitle(s.text)).slice(0, 30))}</button>`).join("")}</div>`
+      : "";
+    return `<div class="msg bot">${esc(m.text).replace(/\n/g, "<br>")}${cites}</div>`;
+  }).join("");
+  log.querySelectorAll(".cite").forEach((el) =>
+    el.addEventListener("click", () => { closeChat(); openDetail(el.dataset.id); }));
+  log.scrollTop = log.scrollHeight;
+}
+
+let chatBusy = false;
+async function sendChat() {
+  const input = $("chatInput");
+  const q = input.value.trim();
+  if (!q || chatBusy) return;
+  if (!thoughts.length) { toast("No khayals to ask about yet"); return; }
+  input.value = "";
+  chatBusy = true;
+  chatHistory.push({ role: "you", text: q });
+  chatHistory.push({ role: "thinking" });
+  renderChat();
+  try {
+    // make sure meaning vectors exist before the first real question
+    if (smartKey() && thoughts.some((t) => !t.vec)) {
+      await embedMissing().catch(() => {});
+    }
+    const { answer, sources } = await askKhayals(q);
+    chatHistory = chatHistory.filter((m) => m.role !== "thinking");
+    chatHistory.push({ role: "bot", text: answer, sources });
+  } catch (err) {
+    chatHistory = chatHistory.filter((m) => m.role !== "thinking");
+    const msg = err.name === "AbortError" ? "That took too long — try again" : err.message;
+    chatHistory.push({ role: "bot", text: msg, sources: [] });
+  } finally {
+    chatBusy = false;
+    renderChat();
+  }
+}
+$("chatSend").addEventListener("click", sendChat);
+$("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
+
 /* ================= onboarding ================= */
 $("onboardDone").addEventListener("click", () => {
   settings.onboarded = true; saveSettings(); $("onboard").hidden = true;
@@ -1820,7 +1949,11 @@ $("onboardDone").addEventListener("click", () => {
 
 /* ================= lifecycle ================= */
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible") return;
+  if (document.visibilityState !== "visible") {
+    MapView.stop(); // don't burn battery while backgrounded
+    return;
+  }
+  if ($("screen-thoughts").classList.contains("active") && settings.view === "map") MapView.start();
   if (recording && !wakeLock) acquireWakeLock();
   catchUpReminders();
   scheduleReminders();

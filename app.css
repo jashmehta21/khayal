@@ -488,6 +488,114 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 
 .day-chip { background: var(--dark); color: #fff; border-color: var(--dark); }
 
+/* ---------- constellation map ---------- */
+.ask-pill {
+  border: none; border-radius: var(--pill); padding: 9px 16px;
+  background: var(--dark); color: #fff; cursor: pointer;
+  font-family: var(--font); font-size: 0.82rem; font-weight: 800; letter-spacing: -0.01em;
+  transition: transform 0.16s var(--spring);
+}
+.ask-pill:active { transform: scale(0.94); }
+
+.map-cta {
+  background: var(--accent-soft); border-radius: var(--r-inner);
+  padding: 15px 16px; margin-bottom: 12px;
+}
+.map-cta p { color: var(--ink-soft); font-size: 0.85rem; line-height: 1.6; font-weight: 500; margin-bottom: 12px; }
+.map-cta b { color: var(--ink); }
+
+.map-wrap {
+  position: relative; background: var(--card); border-radius: var(--r-card);
+  height: 62dvh; min-height: 340px; overflow: hidden; touch-action: none;
+}
+#mapCanvas { display: block; width: 100%; height: 100%; }
+.map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+.map-hud {
+  position: absolute; left: 12px; right: 12px; bottom: 12px;
+  background: rgba(255,255,255,0.95);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  border-radius: 18px; padding: 14px 15px;
+  box-shadow: 0 8px 26px rgba(20,18,15,0.14);
+  animation: riseIn 0.3s var(--ease) both;
+}
+.hud-title { font-size: 0.98rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.35; }
+.hud-meta { color: var(--muted); font-size: 0.76rem; font-weight: 600; margin-top: 4px; }
+.hud-actions { display: flex; gap: 8px; margin-top: 11px; }
+.hud-actions .btn { flex: 1; padding: 11px; font-size: 0.86rem; }
+
+.map-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.map-legend { display: flex; gap: 12px; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+.map-legend span { display: flex; align-items: center; gap: 5px; }
+.map-legend i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.dot-core { background: var(--accent); }
+.dot-high { background: var(--high); }
+.dot-reg { background: var(--faint); }
+
+/* ---------- related khayals ---------- */
+.related-list { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; }
+.related-item {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  background: var(--card); border: none; border-radius: 14px; padding: 11px 13px;
+  cursor: pointer; font-family: var(--font);
+  transition: transform 0.16s var(--ease);
+}
+.related-item:active { transform: scale(0.98); }
+.rel-bar {
+  width: 3px; height: 30px; border-radius: 2px; background: var(--line);
+  flex: none; display: flex; align-items: flex-end; overflow: hidden;
+}
+.rel-bar i { display: block; width: 100%; background: var(--accent); height: 100%; transform-origin: bottom; }
+.rel-text { flex: 1; min-width: 0; }
+.rel-text b {
+  display: block; font-size: 0.88rem; font-weight: 700; letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rel-text em { display: block; font-style: normal; color: var(--muted); font-size: 0.73rem; font-weight: 600; margin-top: 2px; }
+
+/* ---------- ask / chat ---------- */
+.chat-sheet { height: 88dvh; }
+.chat-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.chat-head .note { margin: 4px 0 0; }
+.chat-log {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+  padding: 4px 2px 8px; -webkit-overflow-scrolling: touch;
+}
+.chat-empty { text-align: center; padding: 28px 10px; display: flex; flex-direction: column; gap: 9px; align-items: center; }
+.chat-empty p { color: var(--muted); font-size: 0.92rem; font-weight: 600; margin-bottom: 6px; }
+.seed-chip { font-size: 0.8rem; }
+
+.msg {
+  max-width: 88%; padding: 12px 15px; border-radius: 18px;
+  font-size: 0.94rem; line-height: 1.55; font-weight: 500;
+  animation: riseIn 0.34s var(--ease) both;
+}
+.msg.you { align-self: flex-end; background: var(--dark); color: #fff; border-bottom-right-radius: 6px; font-weight: 600; }
+.msg.bot { align-self: flex-start; background: var(--card); border-bottom-left-radius: 6px; }
+.msg.thinking { display: flex; gap: 4px; align-items: center; padding: 16px 18px; }
+.msg.thinking i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--faint);
+  animation: blink 1.2s ease-in-out infinite;
+}
+.msg.thinking i:nth-child(2) { animation-delay: 0.18s; }
+.msg.thinking i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes blink { 0%,100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+.cites { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.cite {
+  border: 1px solid var(--line); background: var(--card-2); color: var(--ink-soft);
+  border-radius: var(--pill); padding: 5px 11px; font-size: 0.72rem; font-weight: 700;
+  font-family: var(--font); cursor: pointer; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chat-row { display: flex; align-items: center; gap: 9px; padding-top: 6px; }
+#chatInput {
+  flex: 1; border: none; outline: none; background: var(--card);
+  border-radius: var(--pill); padding: 14px 18px; min-width: 0;
+  font-family: var(--font); font-size: 0.96rem; font-weight: 600; color: var(--ink);
+}
+#chatInput::placeholder { color: var(--faint); }
+
 /* ---------- insights ---------- */
 .tier-breakdown { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .tier-row { display: flex; align-items: center; gap: 11px; }
