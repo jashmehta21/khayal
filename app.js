@@ -146,7 +146,8 @@ function polish(text) {
    lives only in this browser's storage. Everything degrades to the offline
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
+const BUILD = "v14";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
 
@@ -1699,6 +1700,7 @@ function renderSettings() {
   renderInstallHelp();
   renderNotifState();
   renderSmartState();
+  $("buildLine").textContent = `Build ${BUILD}`;
 }
 function renderTrash() {
   const list = $("trashList");
@@ -1802,24 +1804,46 @@ $("testKeyBtn").addEventListener("click", async () => {
   $("smartStatus").textContent = "Testing…";
   $("testKeyBtn").disabled = true;
   const sample = "um so i was thinking that uh maybe this thing it works you know";
+
+  /* Always discover first: the model name is the part that goes stale, and
+     guessing it is what kept failing. Then try every candidate the key
+     actually offers before giving up. */
   try {
-    let out;
-    try {
-      out = await smartCleanup(sample);
-    } catch (err) {
-      // the model name is the fragile part — ask the key what it really has, then retry once
-      if (/model/i.test(err.message)) {
-        $("smartStatus").textContent = "Finding a model your key can use…";
-        const { chosen } = await discoverModels({ quiet: true });
-        if (!chosen) throw new Error("Your key has no usable chat model");
-        out = await smartCleanup(sample);
-      } else throw err;
+    $("smartStatus").textContent = "Asking your key what it can run…";
+    let info = null;
+    try { info = await discoverModels({ quiet: true }); }
+    catch (e) { $("smartStatus").textContent = "Couldn't list models: " + e.message; }
+
+    const candidates = info && info.chat.length
+      ? [smartModel(), ...info.chat.filter((m) => m !== smartModel())]
+      : [smartModel()];
+
+    let out = null, lastErr = null, used = null;
+    for (const m of candidates.slice(0, 6)) {
+      localStorage.setItem("khayal-model", m);
+      $("smartStatus").textContent = `Trying ${m}…`;
+      try { out = await smartCleanup(sample); used = m; break; }
+      catch (e) { lastErr = e; }
     }
-    $("smartStatus").textContent = `Working ✓ (${smartModel()})  →  ${out.slice(0, 80)}`;
-    toast("Smart cleanup is live");
+
+    if (out) {
+      localStorage.setItem("khayal-model", used);
+      if (info) setModelOptions(info.chat, used);
+      $("smartStatus").textContent = `Working ✓ on ${used} (${localStorage.getItem("khayal-apiver") || "v1beta"})  →  ${out.slice(0, 70)}`;
+      toast("Smart cleanup is live");
+    } else {
+      // nothing worked — show the ground truth instead of a tidy guess
+      const found = info ? info.all.slice(0, 10).join(", ") : "none";
+      $("smartStatus").innerHTML =
+        `✕ ${esc(lastErr ? lastErr.message : "No model worked")}<br><br>` +
+        `<b>Diagnostics</b><br>API: ${esc(localStorage.getItem("khayal-apiver") || "v1beta")}<br>` +
+        `Models your key reports (${info ? info.all.length : 0}): ${esc(found) || "none"}<br>` +
+        `Build: ${esc(BUILD)}<br><br>Send me this and I'll fix it.`;
+      toast("Test failed");
+    }
   } catch (err) {
     const msg = err.name === "AbortError" ? "Timed out — check your connection" : err.message;
-    $("smartStatus").textContent = "✕ " + msg;
+    $("smartStatus").innerHTML = `✕ ${esc(msg)}<br><br>Build: ${esc(BUILD)}`;
     toast("Test failed");
   } finally {
     $("testKeyBtn").disabled = false;

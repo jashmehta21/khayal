@@ -8,30 +8,51 @@
 const DEFAULT_EMBED_MODEL = "text-embedding-004";
 function embedModel() { return localStorage.getItem("khayal-embed-model") || DEFAULT_EMBED_MODEL; }
 
-/* Ask the API what this key can actually use. */
+/* Google has shipped both v1beta and v1; which one a key answers on varies,
+   so try each rather than assuming. The winner is remembered. */
+const API_VERSIONS = ["v1beta", "v1"];
+function apiBase() {
+  const v = localStorage.getItem("khayal-apiver") || API_VERSIONS[0];
+  return `https://generativelanguage.googleapis.com/${v}`;
+}
+
+/* Ask the API what this key can actually use, across every API version. */
 async function listModels() {
   const key = smartKey();
   if (!key) throw new Error("No API key");
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`,
-      { signal: ctrl.signal });
-    if (!res.ok) {
-      let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
-      throw new Error(friendlyApiError(res.status, d));
-    }
-    const data = await res.json();
-    const all = (data.models || []).map((m) => ({
-      id: String(m.name || "").replace(/^models\//, ""),
-      methods: m.supportedGenerationMethods || [],
-    }));
-    return {
-      chat: all.filter((m) => m.methods.includes("generateContent")).map((m) => m.id),
-      embed: all.filter((m) => m.methods.includes("embedContent")).map((m) => m.id),
-    };
-  } finally { clearTimeout(timer); }
+  let lastErr = null;
+  for (const ver of API_VERSIONS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/${ver}/models?key=${encodeURIComponent(key)}&pageSize=200`,
+        { signal: ctrl.signal });
+      if (!res.ok) {
+        let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
+        lastErr = new Error(`[${ver}] ${res.status}: ${d || "request failed"}`);
+        continue;
+      }
+      const data = await res.json();
+      const all = (data.models || []).map((m) => ({
+        id: String(m.name || "").replace(/^models\//, ""),
+        methods: m.supportedGenerationMethods || [],
+      }));
+      if (!all.length) { lastErr = new Error(`[${ver}] returned no models`); continue; }
+      localStorage.setItem("khayal-apiver", ver);
+      // some responses omit the method list — treat those as usable rather than dropping them
+      const known = all.some((m) => m.methods.length);
+      return {
+        version: ver,
+        all: all.map((m) => m.id),
+        chat: all.filter((m) => !known || m.methods.includes("generateContent")).map((m) => m.id),
+        embed: all.filter((m) => !known || m.methods.includes("embedContent")).map((m) => m.id),
+      };
+    } catch (e) {
+      lastErr = e.name === "AbortError" ? new Error(`[${ver}] timed out`) : e;
+    } finally { clearTimeout(timer); }
+  }
+  throw lastErr || new Error("Could not reach the model list");
 }
 
 /* Prefer something fast and current; fall back to whatever exists. */
@@ -138,7 +159,7 @@ function cosine(a, b) {
 async function embedOne(text) {
   const key = smartKey();
   if (!key) throw new Error("No API key");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${embedModel()}:embedContent?key=${encodeURIComponent(key)}`;
+  const url = `${apiBase()}/models/${embedModel()}:embedContent?key=${encodeURIComponent(key)}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
@@ -160,7 +181,7 @@ async function embedOne(text) {
 async function embedBatch(texts) {
   const key = smartKey();
   if (!key) throw new Error("No API key");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${embedModel()}:batchEmbedContents?key=${encodeURIComponent(key)}`;
+  const url = `${apiBase()}/models/${embedModel()}:batchEmbedContents?key=${encodeURIComponent(key)}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30000);
   try {
@@ -609,7 +630,7 @@ async function askKhayals(question) {
       sources: hits.map((h) => h.t),
     };
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(smartModel())}:generateContent?key=${encodeURIComponent(key)}`;
+  const url = `${apiBase()}/models/${encodeURIComponent(smartModel())}:generateContent?key=${encodeURIComponent(key)}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 25000);
   try {
