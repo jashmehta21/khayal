@@ -1159,17 +1159,21 @@ function renderList() {
   if (currentFilter === "core") items = items.filter((t) => t.tier === 2);
   if (currentFilter === "high") items = items.filter((t) => t.tier === 1);
   if (currentFilter === "fading") items = items.filter(isFading);
+  if (selectedDay) items = items.filter((t) => dayKey(t.createdAt) === selectedDay);
   if (tokens.length) items = items.filter((t) => matchesSearch(t, tokens));
 
   const core = thoughts.filter((t) => t.tier === 2).length;
   const high = thoughts.filter((t) => t.tier === 1).length;
   $("thoughtsStat").textContent = tokens.length
     ? `${items.length} result${items.length === 1 ? "" : "s"} for "${searchQuery.trim()}"`
+    : selectedDay
+    ? `${items.length} on this day`
     : thoughts.length ? `${thoughts.length} khayals · ${core} core · ${high} high` : "";
 
   if (!items.length) {
     list.innerHTML = `<div class="empty-state"><span class="big">${tokens.length ? "🔍" : "✦"}</span>${
       tokens.length ? "Nothing matches those words.<br>Try fewer or different ones."
+      : selectedDay ? "Nothing on this day.<br>Tap the date again to see everything."
       : thoughts.length ? "Nothing here yet." : "No khayals yet.<br>Go catch your first one."}</div>`;
     return;
   }
@@ -1224,16 +1228,108 @@ function streaks(counts) {
   return { current, longest };
 }
 
-let calMonth = null, selectedDay = null;
-function renderCalendar() {
-  const counts = dayCounts();
+let calMonth = null;     // month shown in the expandable grid
+let selectedDay = null;  // 'YYYY-MM-DD', or null for "everything"
+let weekStart = null;    // Sunday of the visible week
+
+const startOfWeek = (d) => addDays(startOfDay(d), -startOfDay(d).getDay());
+
+function ensureDateState() {
+  if (!weekStart) weekStart = startOfWeek(new Date());
   if (!calMonth) calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  if (!selectedDay) selectedDay = keyOf(startOfDay(new Date()));
-  renderStats(counts);
-  renderHeatmap(counts);
-  renderMonth(counts);
-  renderDayPanel();
 }
+
+/* the compact week strip that sits above the memories */
+function renderDateBar() {
+  ensureDateState();
+  const counts = dayCounts();
+  const today = startOfDay(new Date());
+  const end = addDays(weekStart, 6);
+  const monthOpen = !$("monthWrap").hidden;
+
+  $("weekLabel").textContent = monthOpen
+    ? calMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : weekStart.getMonth() === end.getMonth()
+    ? weekStart.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : weekStart.toLocaleDateString(undefined, { month: "short" }) + " – " +
+      end.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+
+  let html = "";
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(weekStart, i);
+    const k = keyOf(d);
+    const n = counts.get(k) || 0;
+    const cls = ["wday", n ? "has" : "", k === selectedDay ? "sel" : "",
+      k === keyOf(today) ? "today" : "", d > today ? "future" : ""].filter(Boolean).join(" ");
+    html += `<button class="${cls}" data-day="${k}" aria-label="${d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}, ${n} khayals">
+      <span class="dow">${d.toLocaleDateString(undefined, { weekday: "narrow" })}</span>
+      <span class="num">${d.getDate()}</span><span class="pip"></span></button>`;
+  }
+  $("weekStrip").innerHTML = html;
+  $("weekStrip").querySelectorAll(".wday").forEach((el) =>
+    el.addEventListener("click", () => toggleDay(el.dataset.day)));
+
+  // the arrows page whichever calendar is on screen
+  $("weekNext").disabled = monthOpen
+    ? new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1) > new Date()
+    : addDays(weekStart, 7) > today;
+
+  if (monthOpen) renderMonth(counts);
+  renderDayChip();
+}
+
+function renderDayChip() {
+  const chip = $("dayChip");
+  if (!selectedDay) { chip.hidden = true; return; }
+  const [y, m, d] = selectedDay.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  chip.hidden = false;
+  chip.textContent = dayGroup(date.getTime()) + "  ✕";
+  chip.onclick = () => toggleDay(selectedDay); // tapping clears it
+}
+
+function toggleDay(k) {
+  selectedDay = selectedDay === k ? null : k;
+  if (selectedDay) {
+    const [y, m, d] = selectedDay.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    weekStart = startOfWeek(date);
+    calMonth = new Date(y, m - 1, 1);
+  }
+  buzz(8);
+  renderDateBar();
+  renderList();
+}
+
+$("weekPrev").addEventListener("click", () => {
+  ensureDateState();
+  if (!$("monthWrap").hidden) calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
+  else weekStart = addDays(weekStart, -7);
+  buzz(8);
+  renderDateBar();
+});
+$("weekNext").addEventListener("click", () => {
+  ensureDateState();
+  const today = startOfDay(new Date());
+  if (!$("monthWrap").hidden) {
+    const next = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+    if (next > new Date()) return;
+    calMonth = next;
+  } else {
+    if (addDays(weekStart, 7) > today) return;
+    weekStart = addDays(weekStart, 7);
+  }
+  buzz(8);
+  renderDateBar();
+});
+$("monthToggle").addEventListener("click", () => {
+  const wrap = $("monthWrap");
+  const opening = wrap.hidden;
+  wrap.hidden = !opening;
+  $("monthToggle").setAttribute("aria-expanded", String(opening));
+  buzz(8);
+  renderDateBar();
+});
 function renderStats(counts) {
   const { current, longest } = streaks(counts);
   const nowD = new Date();
@@ -1274,13 +1370,22 @@ function renderHeatmap(counts) {
     cells += `<div class="heat-col">${col}</div>`;
   }
   $("heatScroll").innerHTML = `<div class="heat-inner"><div class="heat-months">${months}</div><div class="heat-grid">${cells}</div></div>`;
+  // tapping a day in the heatmap jumps straight to that day's memories
   $("heatScroll").querySelectorAll(".heat-cell[data-day]").forEach((el) =>
-    el.addEventListener("click", () => selectDay(el.dataset.day)));
+    el.addEventListener("click", () => {
+      selectedDay = el.dataset.day;
+      const [y, m, d] = selectedDay.split("-").map(Number);
+      weekStart = startOfWeek(new Date(y, m - 1, d));
+      calMonth = new Date(y, m - 1, 1);
+      settings.view = "list";
+      saveSettings();
+      buzz(10);
+      refreshThoughts();
+    }));
   $("heatScroll").scrollLeft = $("heatScroll").scrollWidth;
 }
 function renderMonth(counts) {
   const y = calMonth.getFullYear(), m = calMonth.getMonth();
-  $("monthLabel").textContent = calMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const sample = new Date(2024, 0, 7);
   $("weekdayRow").innerHTML = Array.from({ length: 7 }, (_, i) =>
     `<span>${addDays(sample, i).toLocaleDateString(undefined, { weekday: "narrow" })}</span>`).join("");
@@ -1299,51 +1404,93 @@ function renderMonth(counts) {
   }
   $("monthGrid").innerHTML = html;
   $("monthGrid").querySelectorAll(".mday[data-day]").forEach((el) =>
-    el.addEventListener("click", () => selectDay(el.dataset.day)));
-  $("nextMonth").disabled = new Date(y, m + 1, 1) > new Date();
+    el.addEventListener("click", () => toggleDay(el.dataset.day)));
 }
-function selectDay(k) {
-  selectedDay = k;
-  const [y, m] = k.split("-").map(Number);
-  calMonth = new Date(y, m - 1, 1);
-  buzz(8);
-  renderCalendar();
+
+/* ================= insights ================= */
+function renderInsights() {
+  const counts = dayCounts();
+  renderStats(counts);
+  renderHeatmap(counts);
+  renderTierBreakdown();
+  renderRhythm(counts);
 }
-function renderDayPanel() {
-  const [y, m, d] = selectedDay.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  const items = thoughts.filter((t) => dayKey(t.createdAt) === selectedDay)
-    .sort((a, b) => a.createdAt - b.createdAt);
-  const today = startOfDay(new Date());
-  const days = Math.round((today - startOfDay(date)) / DAY);
-  const full = date.toLocaleDateString(undefined, {
-    day: "numeric", month: "long",
-    ...(date.getFullYear() !== today.getFullYear() ? { year: "numeric" } : {}),
+
+function renderTierBreakdown() {
+  const total = thoughts.length || 1;
+  const rows = [
+    { name: "Core", n: thoughts.filter((t) => t.tier === 2).length, color: "var(--accent)" },
+    { name: "High", n: thoughts.filter((t) => t.tier === 1).length, color: "var(--high)" },
+    { name: "Regular", n: thoughts.filter((t) => t.tier === 0).length, color: "var(--faint)" },
+  ];
+  $("tierBreakdown").innerHTML = rows.map((r) =>
+    `<div class="tier-row">
+      <span class="tier-dot" style="background:${r.color}"></span>
+      <span class="name">${r.name}</span>
+      <span class="track"><span class="fill" data-w="${Math.round((r.n / total) * 100)}" style="background:${r.color}"></span></span>
+      <span class="n">${r.n}</span>
+    </div>`).join("");
+  // let the bars grow in
+  requestAnimationFrame(() => {
+    $("tierBreakdown").querySelectorAll(".fill").forEach((el) => { el.style.width = el.dataset.w + "%"; });
   });
-  const heading = days >= 0 && days < 7 ? `${dayGroup(date.getTime())} · ${full}` : full;
-  const body = items.length ? items.map((t) => thoughtCardHTML(t)).join("")
-    : `<div class="empty-state small"><span class="big">·</span>Nothing on this day.</div>`;
-  $("dayPanel").innerHTML = `<div class="day-head"><span>${esc(heading)}</span></div><div class="thought-list">${body}</div>`;
-  $("dayPanel").querySelectorAll(".thought-card").forEach((el) =>
-    el.addEventListener("click", () => openDetail(el.dataset.id)));
+  setTimeout(() => {
+    $("tierBreakdown").querySelectorAll(".fill").forEach((el) => { el.style.width = el.dataset.w + "%"; });
+  }, 60);
 }
-$("prevMonth").addEventListener("click", () => {
-  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
-  buzz(8); renderCalendar();
-});
-$("nextMonth").addEventListener("click", () => {
-  const next = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
-  if (next > new Date()) return;
-  calMonth = next; buzz(8); renderCalendar();
-});
+
+function renderRhythm(counts) {
+  const el = $("rhythm");
+  if (!thoughts.length) {
+    el.innerHTML = `<p class="note" style="margin:0">Catch a few khayals and your patterns will show up here.</p>`;
+    return;
+  }
+  const sorted = [...thoughts].sort((a, b) => a.createdAt - b.createdAt);
+  const first = sorted[0].createdAt;
+  const weeks = Math.max(1, Math.ceil((now() - first) / (7 * DAY)));
+  const perWeek = (thoughts.length / weeks).toFixed(1);
+
+  let busyKey = null, busyN = 0;
+  for (const [k, n] of counts) if (n > busyN) { busyN = n; busyKey = k; }
+  const busyDate = busyKey ? new Date(busyKey.split("-").map(Number)[0], busyKey.split("-").map(Number)[1] - 1, busyKey.split("-").map(Number)[2]) : null;
+
+  // which weekday and which part of the day you think most
+  const dowCount = Array(7).fill(0);
+  const slots = { Morning: 0, Afternoon: 0, Evening: 0, "Late night": 0 };
+  for (const t of thoughts) {
+    const d = new Date(t.createdAt);
+    dowCount[d.getDay()]++;
+    const h = d.getHours();
+    if (h < 5) slots["Late night"]++;
+    else if (h < 12) slots.Morning++;
+    else if (h < 17) slots.Afternoon++;
+    else if (h < 22) slots.Evening++;
+    else slots["Late night"]++;
+  }
+  const topDow = dowCount.indexOf(Math.max(...dowCount));
+  const dowName = addDays(new Date(2024, 0, 7), topDow).toLocaleDateString(undefined, { weekday: "long" });
+  const topSlot = Object.entries(slots).sort((a, b) => b[1] - a[1])[0][0];
+
+  const rows = [
+    ["Thinking since", new Date(first).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })],
+    ["Khayals a week", perWeek],
+    ["Busiest day", busyDate ? `${busyDate.toLocaleDateString(undefined, { day: "numeric", month: "short" })} · ${busyN}` : "—"],
+    ["Most active on", dowName + "s"],
+    ["Peak time", topSlot],
+    ["Days captured", counts.size],
+  ];
+  el.innerHTML = rows.map(([k, v]) =>
+    `<div class="rhythm-row"><span class="k">${esc(k)}</span><span class="v">${esc(String(v))}</span></div>`).join("");
+}
 
 function refreshThoughts() {
-  const cal = settings.view === "calendar";
+  const insights = settings.view === "insights";
   document.querySelectorAll(".view-chip").forEach((x) =>
-    x.classList.toggle("active", (x.dataset.view === "calendar") === cal));
-  $("listView").hidden = cal;
-  $("calendarView").hidden = !cal;
-  if (cal) renderCalendar(); else renderList();
+    x.classList.toggle("active", (x.dataset.view === "insights") === insights));
+  $("listView").hidden = insights;
+  $("insightsView").hidden = !insights;
+  if (insights) renderInsights();
+  else { renderDateBar(); renderList(); }
   moveAllThumbs();
 }
 document.querySelectorAll(".view-chip").forEach((c) =>

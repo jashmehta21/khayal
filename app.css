@@ -433,6 +433,76 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .empty-state.small { padding: 24px 16px; }
 .empty-state.small .big { width: 44px; height: 44px; font-size: 1.1rem; margin-bottom: 10px; }
 
+/* ---------- compact date bar ---------- */
+.datebar {
+  background: var(--card); border-radius: var(--r-card);
+  padding: 14px 12px 12px; margin: 10px 0 12px;
+}
+.datebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.icon-btn.sm { width: 30px; height: 30px; border: none; background: var(--card-2); }
+.month-btn {
+  display: flex; align-items: center; gap: 6px; border: none; background: none;
+  font-family: var(--font); font-size: 0.92rem; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--ink); cursor: pointer; padding: 6px 10px; border-radius: var(--pill);
+  transition: background 0.2s;
+}
+.month-btn:active { background: var(--card-2); }
+.month-btn .caret { transition: transform 0.3s var(--ease); color: var(--faint); }
+.month-btn[aria-expanded="true"] .caret { transform: rotate(180deg); }
+
+.week-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.wday {
+  position: relative; border: none; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 4px 0; border-radius: 14px; font-family: var(--font);
+  transition: transform 0.18s var(--spring);
+}
+.wday:active { transform: scale(0.92); }
+.wday .dow { font-size: 0.62rem; font-weight: 800; color: var(--faint); letter-spacing: 0.04em; }
+.wday .num {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem; font-weight: 700; color: var(--ink);
+  border: 1.5px solid transparent;
+  transition: background 0.25s var(--ease), color 0.25s, border-color 0.25s;
+}
+.wday.today .num { border-color: var(--ink); }
+.wday.has .num { background: var(--accent-soft); color: var(--accent); }
+.wday.sel .num { background: var(--dark); color: #fff; border-color: var(--dark); }
+.wday.future { opacity: 0.32; pointer-events: none; }
+.wday .pip {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+  opacity: 0; transition: opacity 0.2s;
+}
+.wday.has .pip { opacity: 1; }
+.wday.sel .pip { background: var(--dark); }
+
+.month-wrap {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+  animation: monthOpen 0.34s var(--ease) both;
+}
+@keyframes monthOpen {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.day-chip { background: var(--dark); color: #fff; border-color: var(--dark); }
+
+/* ---------- insights ---------- */
+.tier-breakdown { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.tier-row { display: flex; align-items: center; gap: 11px; }
+.tier-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.tier-row .name { font-size: 0.88rem; font-weight: 700; width: 62px; flex: none; }
+.tier-row .track { flex: 1; height: 8px; background: var(--card-2); border-radius: var(--pill); overflow: hidden; }
+.tier-row .fill { display: block; height: 100%; border-radius: var(--pill); width: 0; transition: width 0.9s var(--ease); }
+.tier-row .n { font-size: 0.85rem; font-weight: 800; width: 30px; text-align: right; flex: none; }
+
+.rhythm { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.rhythm-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rhythm-row + .rhythm-row { border-top: 1px solid var(--line); padding-top: 10px; }
+.rhythm-row .k { color: var(--muted); font-size: 0.86rem; font-weight: 600; }
+.rhythm-row .v { font-size: 1rem; font-weight: 800; letter-spacing: -0.02em; text-align: right; }
+
 /* ---------- calendar ---------- */
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
 .stat-tile { background: var(--card); border-radius: 18px; padding: 14px 6px; text-align: center; }

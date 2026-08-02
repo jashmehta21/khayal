@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=10">
+<link rel="stylesheet" href="app.css?v=11">
 </head>
 <body>
 
@@ -132,8 +132,8 @@
     </header>
 
     <div class="seg" role="tablist" aria-label="View">
-      <button class="seg-btn view-chip active" data-view="list" role="tab">List</button>
-      <button class="seg-btn view-chip" data-view="calendar" role="tab">Calendar</button>
+      <button class="seg-btn view-chip active" data-view="list" role="tab">Memories</button>
+      <button class="seg-btn view-chip" data-view="insights" role="tab">Insights</button>
       <span class="seg-thumb" id="viewThumb" aria-hidden="true"></span>
     </div>
 
@@ -143,7 +143,29 @@
         <input type="search" id="searchBox" placeholder="Search your mind…" autocomplete="off">
         <button id="searchClear" class="search-clear" hidden aria-label="Clear search">✕</button>
       </div>
+
+      <div class="datebar">
+        <div class="datebar-head">
+          <button id="weekPrev" class="icon-btn sm" aria-label="Previous week">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <button id="monthToggle" class="month-btn" aria-expanded="false">
+            <span id="weekLabel"></span>
+            <svg class="caret" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <button id="weekNext" class="icon-btn sm" aria-label="Next week">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+        <div class="week-strip" id="weekStrip"></div>
+        <div class="month-wrap" id="monthWrap" hidden>
+          <div class="weekday-row" id="weekdayRow"></div>
+          <div class="month-grid" id="monthGrid"></div>
+        </div>
+      </div>
+
       <div class="chip-row scroll-row">
+        <button class="chip day-chip" id="dayChip" hidden></button>
         <button class="chip filter-chip active" data-filter="all">All</button>
         <button class="chip filter-chip" data-filter="core">Core</button>
         <button class="chip filter-chip" data-filter="high">High</button>
@@ -152,7 +174,7 @@
       <div id="thoughtList" class="thought-list"></div>
     </div>
 
-    <div id="calendarView" hidden>
+    <div id="insightsView" hidden>
       <div class="stat-grid" id="statGrid"></div>
 
       <div class="card">
@@ -164,20 +186,14 @@
       </div>
 
       <div class="card">
-        <div class="month-nav">
-          <button id="prevMonth" class="icon-btn" aria-label="Previous month">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          </button>
-          <h3 id="monthLabel"></h3>
-          <button id="nextMonth" class="icon-btn" aria-label="Next month">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-        </div>
-        <div class="weekday-row" id="weekdayRow"></div>
-        <div class="month-grid" id="monthGrid"></div>
+        <div class="micro-label">WHAT YOU KEEP</div>
+        <div id="tierBreakdown" class="tier-breakdown"></div>
       </div>
 
-      <div id="dayPanel"></div>
+      <div class="card">
+        <div class="micro-label">YOUR RHYTHM</div>
+        <div id="rhythm" class="rhythm"></div>
+      </div>
     </div>
   </section>
 
@@ -392,6 +408,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
