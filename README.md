@@ -10,11 +10,12 @@ Optional, recommended: in Edge or Chrome, click the **install icon** in the addr
 (or menu → *Install Khayal*). Khayal becomes a real desktop app with its own window
 and icon — after that, launch it from the Start menu like any app.
 
-## Get it on your iPhone (needs hosting)
+## Get it on your iPhone
 
-The app must live at a normal `https://` link for the iPhone to install it.
-When you're ready, ask Claude to host it — then on your iPhone you just:
-open the link in Safari → tap **Share** → **Add to Home Screen**. Done.
+The app is live at **https://jashmehta21.github.io/khayal/**
+
+On your iPhone: open that link in Safari → tap **Share** → **Add to Home Screen**.
+Khayal becomes a real app icon that works fully offline.
 
 ## How it works
 
