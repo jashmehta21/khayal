@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/outfit.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=3">
+<link rel="stylesheet" href="app.css?v=5">
 </head>
 <body>
 
@@ -62,19 +62,51 @@
       <h1>Khayals</h1>
       <p class="subtitle" id="thoughtsStat"></p>
     </header>
-    <div class="list-controls">
-      <div class="search-wrap">
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
-        <input type="search" id="searchBox" placeholder="Search your mind…" autocomplete="off">
-      </div>
-      <div class="filter-row">
-        <button class="chip filter-chip active" data-filter="all">All</button>
-        <button class="chip filter-chip" data-filter="core">✦ Core</button>
-        <button class="chip filter-chip" data-filter="high">★ High</button>
-        <button class="chip filter-chip" data-filter="fading">Fading</button>
-      </div>
+    <div class="seg-control view-toggle" role="tablist" aria-label="View">
+      <button class="seg view-chip active" data-view="list" role="tab">List</button>
+      <button class="seg view-chip" data-view="calendar" role="tab">Calendar</button>
     </div>
-    <div id="thoughtList" class="thought-list"></div>
+
+    <div id="listView">
+      <div class="list-controls">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+          <input type="search" id="searchBox" placeholder="Search your mind…" autocomplete="off">
+          <button id="searchClear" class="search-clear" hidden aria-label="Clear search">✕</button>
+        </div>
+        <div class="filter-row">
+          <button class="chip filter-chip active" data-filter="all">All</button>
+          <button class="chip filter-chip" data-filter="core">✦ Core</button>
+          <button class="chip filter-chip" data-filter="high">★ High</button>
+          <button class="chip filter-chip" data-filter="fading">Fading</button>
+        </div>
+      </div>
+      <div id="thoughtList" class="thought-list"></div>
+    </div>
+
+    <div id="calendarView" hidden>
+      <div class="stat-grid" id="statGrid"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Your year</h3>
+          <div class="heat-legend"><span>less</span><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i><span>more</span></div>
+        </div>
+        <div class="heat-scroll" id="heatScroll"></div>
+      </div>
+
+      <div class="panel">
+        <div class="month-nav">
+          <button id="prevMonth" class="nav-btn" aria-label="Previous month">‹</button>
+          <h3 id="monthLabel"></h3>
+          <button id="nextMonth" class="nav-btn" aria-label="Next month">›</button>
+        </div>
+        <div class="weekday-row" id="weekdayRow"></div>
+        <div class="month-grid" id="monthGrid"></div>
+      </div>
+
+      <div id="dayPanel"></div>
+    </div>
   </section>
 
   <!-- ============ REVIEW ============ -->
@@ -201,6 +233,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

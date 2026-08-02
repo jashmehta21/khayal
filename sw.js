@@ -1,11 +1,11 @@
 /* Khayal service worker — makes the app work fully offline. */
 /* Bump VERSION and the ?v= tags in index.html together when shipping changes. */
-const VERSION = "khayal-v4";
+const VERSION = "khayal-v6";
 const ASSETS = [
   "./",
   "./index.html",
-  "./app.css?v=3",
-  "./app.js?v=3",
+  "./app.css?v=5",
+  "./app.js?v=5",
   "./manifest.webmanifest",
   "./fonts/outfit.woff2",
   "./icons/icon-192.png",

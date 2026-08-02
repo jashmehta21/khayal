@@ -29,9 +29,15 @@ Khayal becomes a real app icon that works fully offline.
   "question mark", or "new line" and you get the punctuation.
   Tap **✨ Polish** to clean text up manually — tap the toast to undo.
   Turn the whole thing off in Settings → Dictation.
-- **Khayals** — everything you've caught, grouped by day (Today, Yesterday,
-  weekday, then date). Each card shows its opening line as a headline with a
-  dimmed preview underneath. Searchable, newest first.
+- **Khayals — List** — everything you've caught, grouped by day (Today,
+  Yesterday, weekday, then date). Each card shows its opening line as a
+  headline with a dimmed preview underneath.
+- **Search** — type any words and it finds khayals containing *all* of them,
+  in any order. Matches are highlighted in gold, with a live result count.
+- **Khayals — Calendar** — your thinking at a glance: streak and total tiles,
+  a GitHub-style heatmap of the last six months (brighter = more khayals that
+  day), and a month grid you can page through. Tap any day in either one to
+  read everything you thought that day.
 - **Tiers** — promote what matters: ★ High → ✦ Core (your core memories).
 - **Review** — old khayals come back as cards: Keep / Promote / Later / Purge.
   Anything untouched for 30+ days is flagged as *fading* so you know what to let go.
