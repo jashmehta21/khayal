@@ -1,62 +1,60 @@
-# Khayal ✦ — catch every khayal
+# Khayal — thoughts & to-dos
 
-Your thoughts, kept safe. Private, offline, yours — nothing ever leaves your device.
+Catch every khayal. Private, offline, yours — nothing ever leaves your device.
 
-## Use it on this PC (one click)
+**Live:** https://jashmehta21.github.io/khayal/
 
-Double-click **`Start Khayal.bat`** in this folder. Your browser opens the app.
+## Install
 
-Optional, recommended: in Edge or Chrome, click the **install icon** in the address bar
-(or menu → *Install Khayal*). Khayal becomes a real desktop app with its own window
-and icon — after that, launch it from the Start menu like any app.
+**iPhone:** open the link in Safari → **Share** → **Add to Home Screen**.
+**Desktop:** open the link in Edge/Chrome → **install icon** in the address bar.
+(Or run `Start Khayal.bat` in this folder to serve it locally.)
 
-## Get it on your iPhone
+Installing matters on iPhone: notifications only work once Khayal is on the
+Home Screen.
 
-The app is live at **https://jashmehta21.github.io/khayal/**
+## What it does
 
-On your iPhone: open that link in Safari → tap **Share** → **Add to Home Screen**.
-Khayal becomes a real app icon that works fully offline.
-
-## How it works
-
-- **Capture** — tap the mic and speak. English ya Hindi — Hindi speech is
-  automatically written in English letters ("zindagi", not "ज़िंदगी").
-  You can edit before saving. Typing works too.
-- **Auto-polish** — raw dictation is cleaned up as you speak: sentences get
-  capital letters and full stops (your natural pauses become the sentence
-  breaks, a long pause starts a new paragraph), and fillers like "um", "uh",
-  "you know", "matlab", "yaani" are dropped. Say "full stop", "comma",
-  "question mark", or "new line" and you get the punctuation.
-  Tap **✨ Polish** to clean text up manually — tap the toast to undo.
-  Turn the whole thing off in Settings → Dictation.
-- **Khayals — List** — everything you've caught, grouped by day (Today,
-  Yesterday, weekday, then date). Each card shows its opening line as a
-  headline with a dimmed preview underneath.
-- **Search** — type any words and it finds khayals containing *all* of them,
-  in any order. Matches are highlighted in gold, with a live result count.
-- **Khayals — Calendar** — your thinking at a glance: streak and total tiles,
-  a GitHub-style heatmap of the last six months (brighter = more khayals that
-  day), and a month grid you can page through. Tap any day in either one to
-  read everything you thought that day.
-- **Tiers** — promote what matters: ★ High → ✦ Core (your core memories).
-- **Review** — old khayals come back as cards: Keep / Promote / Later / Purge.
-  Anything untouched for 30+ days is flagged as *fading* so you know what to let go.
-- **Trash** — purged khayals wait 30 days before disappearing forever.
-- **Backup** — Settings → Export backup gives you a file with everything.
-  Import it on another device to move your khayals there.
+- **Capture** — one screen, two modes: **Khayal** (a thought) or **To-do**.
+  Tap the mic and speak, English ya Hindi — Hindi is written in English letters
+  ("zindagi", not "ज़िंदगी").
+- **Auto-polish** — dictation is cleaned as you speak: capitals and full stops
+  (your pauses become the sentence breaks, a long pause a new paragraph), and
+  fillers like "um", "matlab", "yaani" are dropped. Say "full stop", "comma" or
+  "new line" for real punctuation. Tap **✨ Polish** to clean up manually — the
+  toast undoes it. Switch it off in Settings → Dictation.
+- **To-dos** — quick-add, or dictate from Capture. Grouped into Overdue, Today,
+  Tomorrow, Upcoming, Someday and Done, with a live progress ring for the day.
+  Tap the circle to complete, tap the row to edit, delete with undo.
+- **Reminders** — Khayal notifies you when a to-do is due while it's open or in
+  the background. For an alarm that fires even when Khayal is fully closed, use
+  **Add to phone calendar** on a to-do: it drops a real event with an alert into
+  your phone's own calendar.
+- **Khayals — List** — grouped by day, headline plus dimmed preview.
+- **Search** — matches every word you type, in any order, and highlights hits.
+- **Khayals — Calendar** — streak and total tiles, a six-month activity heatmap,
+  and a month grid. Tap any day to read what you thought that day.
+- **Review** — old khayals resurface as cards: Keep / Make High / Make Core /
+  Later / Purge. Untouched for 30+ days and they're flagged *fading*.
+- **Trash** — purged khayals wait 30 days before going for good.
+- **Backup** — Settings → Export writes a file with khayals, to-dos and trash.
+  Import merges it on another device (newer edits win, no duplicates).
 
 ## Where is my data?
 
-Only inside the browser's private storage on each device (IndexedDB).
-No cloud, no account, no tracking. Export a backup now and then to be safe.
+Only in this browser's private storage on each device (IndexedDB). No cloud,
+no account, no tracking. Export a backup now and then.
 
-## For future updates (note to developers)
+## Notes for developers
 
 Plain HTML/CSS/JS, no build step. When shipping a change, bump **both**:
 
 1. the `?v=` tags on `app.css` / `app.js` in `index.html`, and
 2. `VERSION` plus the matching `?v=` entries in `sw.js`'s `ASSETS`.
 
-They must agree — the service worker caches by full URL, so the `?v=` tag is
-what tells a browser a file is genuinely new. Navigations are network-first,
-so a new version appears on the next launch (and still works offline).
+They must agree — the service worker caches by full URL, so the `?v=` tag is what
+tells a browser a file is genuinely new. Navigations are network-first, so a new
+version appears on the next launch and still works offline.
+
+**Never** rewrite these files with PowerShell `Get-Content`/`Set-Content` — 5.1
+reads as ANSI and double-encodes the glyphs into mojibake.

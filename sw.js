@@ -1,22 +1,20 @@
-/* Khayal service worker — makes the app work fully offline. */
+/* Khayal service worker — offline shell + to-do notifications. */
 /* Bump VERSION and the ?v= tags in index.html together when shipping changes. */
-const VERSION = "khayal-v6";
+const VERSION = "khayal-v7";
 const ASSETS = [
   "./",
   "./index.html",
-  "./app.css?v=5",
-  "./app.js?v=5",
+  "./app.css?v=6",
+  "./app.js?v=6",
   "./manifest.webmanifest",
-  "./fonts/outfit.woff2",
+  "./fonts/jakarta.woff2",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(
-    caches.open(VERSION).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
-  );
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (e) => {
@@ -28,8 +26,7 @@ self.addEventListener("activate", (e) => {
 });
 
 /* Navigations are network-first so a new version shows up immediately (falling
-   back to cache when offline). Other assets are stale-while-revalidate: instant
-   from cache, refreshed in the background. */
+   back to cache when offline). Other assets are stale-while-revalidate. */
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET" || !e.request.url.startsWith(self.location.origin)) return;
 
@@ -62,6 +59,19 @@ self.addEventListener("fetch", (e) => {
       if (cached) { e.waitUntil(network); return cached; }
       const resp = await network;
       return resp || Response.error();
+    })
+  );
+});
+
+/* tapping a to-do reminder opens Khayal on the to-dos screen */
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow ? self.clients.openWindow("./") : undefined;
     })
   );
 });

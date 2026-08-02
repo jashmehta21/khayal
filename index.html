@@ -5,15 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Khayal</title>
 <meta name="description" content="Catch every khayal. Private, offline, yours.">
-<meta name="theme-color" content="#0c0714">
+<meta name="theme-color" content="#efedE9">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
-<link rel="preload" href="fonts/outfit.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=5">
+<link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css?v=6">
 </head>
 <body>
 
@@ -21,65 +21,133 @@
 
   <!-- ============ CAPTURE ============ -->
   <section class="screen active" id="screen-capture">
-    <header class="screen-head brand-head">
-      <h1 class="wordmark">Khayal</h1>
-      <p class="subtitle" id="todayStat">Catch every khayal ✦</p>
+    <header class="screen-head">
+      <div class="head-row">
+        <h1>Capture</h1>
+        <div class="head-date" id="headDate"></div>
+      </div>
+      <p class="sub" id="todayStat">Catch every khayal</p>
     </header>
 
-    <div class="capture-body">
+    <div class="seg" role="tablist" aria-label="What to capture">
+      <button class="seg-btn active" data-mode="khayal" role="tab">Khayal</button>
+      <button class="seg-btn" data-mode="todo" role="tab">To-do</button>
+      <span class="seg-thumb" id="segThumb" aria-hidden="true"></span>
+    </div>
+
+    <div class="card compose-card">
+      <div class="micro-label" id="composeLabel">THOUGHT</div>
       <div class="transcript-wrap">
-        <textarea id="transcript" placeholder="Bolo ya likho — jo bhi mann mein hai…" rows="5"></textarea>
+        <textarea id="transcript" placeholder="Bolo ya likho — jo bhi mann mein hai…" rows="4"></textarea>
         <div id="interim" class="interim" aria-live="polite"></div>
-        <button id="polishBtn" class="polish-chip" hidden>✨ Polish</button>
       </div>
+      <button id="polishBtn" class="chip chip-accent" hidden>✨ Polish</button>
 
-      <div class="seg-control" role="tablist" aria-label="Voice language">
-        <button class="seg lang-chip" data-lang="en-IN" id="langEn" role="tab">English</button>
-        <button class="seg lang-chip" data-lang="hi-IN" id="langHi" role="tab">Hindi</button>
+      <div id="todoOptions" hidden>
+        <div class="micro-label mt">WHEN</div>
+        <div class="chip-row">
+          <button class="chip due-chip active" data-due="none">Someday</button>
+          <button class="chip due-chip" data-due="today">Today</button>
+          <button class="chip due-chip" data-due="tomorrow">Tomorrow</button>
+          <button class="chip due-chip" data-due="weekend">Weekend</button>
+        </div>
+        <div class="due-detail" id="dueDetail" hidden>
+          <label class="field">
+            <span class="micro-label">DATE</span>
+            <input type="date" id="dueDate">
+          </label>
+          <label class="field">
+            <span class="micro-label">TIME</span>
+            <input type="time" id="dueTime" value="09:00">
+          </label>
+        </div>
       </div>
-      <p class="lang-note" id="langNote" hidden>Hindi bolo — English letters mein likhega ✓</p>
+    </div>
 
-      <div class="mic-zone">
-        <button id="micBtn" class="mic-btn" aria-label="Start recording">
-          <span class="mic-ring r1"></span>
-          <span class="mic-ring r2"></span>
-          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
-        </button>
-        <div class="wave" id="wave" hidden><i></i><i></i><i></i><i></i><i></i></div>
-        <div id="micHint" class="mic-hint">Tap to speak</div>
+    <div class="mic-zone">
+      <div class="lang-seg" role="tablist" aria-label="Voice language">
+        <button class="lang-btn" data-lang="en-IN" id="langEn" role="tab">EN</button>
+        <button class="lang-btn" data-lang="hi-IN" id="langHi" role="tab">HI</button>
       </div>
+      <button id="micBtn" class="mic-btn" aria-label="Start recording">
+        <span class="mic-ring r1"></span>
+        <span class="mic-ring r2"></span>
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+      </button>
+      <div class="wave" id="wave" hidden><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div id="micHint" class="mic-hint">Tap to speak</div>
+    </div>
 
-      <div class="capture-actions" id="captureActions" hidden>
-        <button id="discardBtn" class="btn ghost">Discard</button>
-        <button id="saveBtn" class="btn primary">Save khayal ✦</button>
-      </div>
+    <div class="capture-actions" id="captureActions" hidden>
+      <button id="discardBtn" class="btn ghost">Discard</button>
+      <button id="saveBtn" class="btn primary">Save khayal</button>
     </div>
   </section>
 
-  <!-- ============ THOUGHTS ============ -->
+  <!-- ============ TO-DOS ============ -->
+  <section class="screen" id="screen-todos">
+    <header class="screen-head">
+      <div class="head-row">
+        <h1>To-dos</h1>
+        <button id="clearDoneBtn" class="icon-btn" aria-label="Clear completed" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
+        </button>
+      </div>
+      <p class="sub" id="todoStat"></p>
+    </header>
+
+    <div class="card progress-card" id="progressCard" hidden>
+      <div class="progress-top">
+        <div>
+          <div class="micro-label">TODAY</div>
+          <div class="big-num"><span id="doneCount">0</span><span class="of" id="totalCount">/0</span></div>
+        </div>
+        <div class="ring-wrap">
+          <svg class="ring" viewBox="0 0 44 44" width="60" height="60">
+            <circle class="ring-bg" cx="22" cy="22" r="19"></circle>
+            <circle class="ring-fg" id="ringFg" cx="22" cy="22" r="19"></circle>
+          </svg>
+          <span class="ring-pct" id="ringPct">0%</span>
+        </div>
+      </div>
+      <div class="bar-track"><span class="bar-fill" id="barFill"></span></div>
+    </div>
+
+    <div class="quick-add card">
+      <button class="qa-check" aria-hidden="true"></button>
+      <input type="text" id="quickAdd" placeholder="Add a to-do…" autocomplete="off" enterkeyhint="done">
+      <button id="quickAddBtn" class="qa-go" aria-label="Add to-do">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
+    </div>
+
+    <div id="todoList"></div>
+  </section>
+
+  <!-- ============ KHAYALS ============ -->
   <section class="screen" id="screen-thoughts">
     <header class="screen-head">
-      <h1>Khayals</h1>
-      <p class="subtitle" id="thoughtsStat"></p>
+      <div class="head-row"><h1>Khayals</h1></div>
+      <p class="sub" id="thoughtsStat"></p>
     </header>
-    <div class="seg-control view-toggle" role="tablist" aria-label="View">
-      <button class="seg view-chip active" data-view="list" role="tab">List</button>
-      <button class="seg view-chip" data-view="calendar" role="tab">Calendar</button>
+
+    <div class="seg" role="tablist" aria-label="View">
+      <button class="seg-btn view-chip active" data-view="list" role="tab">List</button>
+      <button class="seg-btn view-chip" data-view="calendar" role="tab">Calendar</button>
+      <span class="seg-thumb" id="viewThumb" aria-hidden="true"></span>
     </div>
 
     <div id="listView">
-      <div class="list-controls">
-        <div class="search-wrap">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
-          <input type="search" id="searchBox" placeholder="Search your mind…" autocomplete="off">
-          <button id="searchClear" class="search-clear" hidden aria-label="Clear search">✕</button>
-        </div>
-        <div class="filter-row">
-          <button class="chip filter-chip active" data-filter="all">All</button>
-          <button class="chip filter-chip" data-filter="core">✦ Core</button>
-          <button class="chip filter-chip" data-filter="high">★ High</button>
-          <button class="chip filter-chip" data-filter="fading">Fading</button>
-        </div>
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+        <input type="search" id="searchBox" placeholder="Search your mind…" autocomplete="off">
+        <button id="searchClear" class="search-clear" hidden aria-label="Clear search">✕</button>
+      </div>
+      <div class="chip-row scroll-row">
+        <button class="chip filter-chip active" data-filter="all">All</button>
+        <button class="chip filter-chip" data-filter="core">Core</button>
+        <button class="chip filter-chip" data-filter="high">High</button>
+        <button class="chip filter-chip" data-filter="fading">Fading</button>
       </div>
       <div id="thoughtList" class="thought-list"></div>
     </div>
@@ -87,19 +155,23 @@
     <div id="calendarView" hidden>
       <div class="stat-grid" id="statGrid"></div>
 
-      <div class="panel">
-        <div class="panel-head">
-          <h3>Your year</h3>
+      <div class="card">
+        <div class="card-head">
+          <div class="micro-label">YOUR YEAR</div>
           <div class="heat-legend"><span>less</span><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i><span>more</span></div>
         </div>
         <div class="heat-scroll" id="heatScroll"></div>
       </div>
 
-      <div class="panel">
+      <div class="card">
         <div class="month-nav">
-          <button id="prevMonth" class="nav-btn" aria-label="Previous month">‹</button>
+          <button id="prevMonth" class="icon-btn" aria-label="Previous month">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
           <h3 id="monthLabel"></h3>
-          <button id="nextMonth" class="nav-btn" aria-label="Next month">›</button>
+          <button id="nextMonth" class="icon-btn" aria-label="Next month">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
         </div>
         <div class="weekday-row" id="weekdayRow"></div>
         <div class="month-grid" id="monthGrid"></div>
@@ -112,25 +184,37 @@
   <!-- ============ REVIEW ============ -->
   <section class="screen" id="screen-review">
     <header class="screen-head">
-      <h1>Review</h1>
-      <p class="subtitle">Keep what matters. Let the rest go.</p>
+      <div class="head-row"><h1>Review</h1></div>
+      <p class="sub">Keep what matters. Let the rest go.</p>
     </header>
-    <div id="fadingBanner" class="fading-banner" hidden></div>
+    <div id="fadingBanner" class="banner" hidden></div>
     <div id="reviewArea"></div>
   </section>
 
   <!-- ============ SETTINGS ============ -->
   <section class="screen" id="screen-settings">
     <header class="screen-head">
-      <h1>Settings</h1>
-      <p class="subtitle" id="statsLine"></p>
+      <div class="head-row"><h1>Settings</h1></div>
+      <p class="sub" id="statsLine"></p>
     </header>
 
-    <div class="settings-group">
-      <h2>Dictation</h2>
+    <div class="card">
+      <div class="micro-label">REMINDERS</div>
+      <p class="note" id="notifNote"></p>
+      <button id="notifBtn" class="btn dark full">Turn on notifications</button>
+      <label class="switch-row" for="remindToggle">
+        <span class="switch-label">Remind me about to-dos
+          <em>Alerts while Khayal is open or in the background</em>
+        </span>
+        <input type="checkbox" id="remindToggle" class="switch">
+      </label>
+    </div>
+
+    <div class="card">
+      <div class="micro-label">DICTATION</div>
       <label class="switch-row" for="autoPolishToggle">
         <span class="switch-label">Auto-polish my speech
-          <em>Adds punctuation, capital letters, removes "um", "matlab"…</em>
+          <em>Adds punctuation and capitals, removes "um", "matlab"…</em>
         </span>
         <input type="checkbox" id="autoPolishToggle" class="switch">
       </label>
@@ -140,99 +224,137 @@
         </span>
         <input type="checkbox" id="autoSaveToggle" class="switch">
       </label>
+      <label class="switch-row" for="motionToggle">
+        <span class="switch-label">Animations
+          <em>Turn off for a calmer, faster feel</em>
+        </span>
+        <input type="checkbox" id="motionToggle" class="switch">
+      </label>
     </div>
 
-    <div class="settings-group">
-      <h2>Backup</h2>
-      <p class="settings-note">Your khayals live only on this device. Export a backup file regularly, and import it on your other devices to move them across.</p>
-      <div class="settings-row">
-        <button id="exportBtn" class="btn secondary">Export backup</button>
-        <button id="importBtn" class="btn secondary">Import backup</button>
+    <div class="card">
+      <div class="micro-label">BACKUP</div>
+      <p class="note">Your khayals and to-dos live only on this device. Export a backup regularly, and import it on your other devices.</p>
+      <div class="btn-row">
+        <button id="exportBtn" class="btn dark">Export</button>
+        <button id="importBtn" class="btn light">Import</button>
         <input type="file" id="importFile" accept=".json,application/json" hidden>
       </div>
     </div>
 
-    <div class="settings-group">
-      <h2>Trash</h2>
-      <p class="settings-note">Purged khayals rest here for 30 days, then disappear forever.</p>
+    <div class="card">
+      <div class="micro-label">TRASH</div>
+      <p class="note">Purged khayals rest here for 30 days, then disappear forever.</p>
       <div id="trashList" class="trash-list"></div>
-      <div class="settings-row">
-        <button id="emptyTrashBtn" class="btn danger" hidden>Empty trash now</button>
-      </div>
+      <button id="emptyTrashBtn" class="btn danger full" hidden>Empty trash now</button>
     </div>
 
-    <div class="settings-group">
-      <h2>Install on this device</h2>
-      <div id="installHelp" class="settings-note"></div>
-      <button id="installBtn" class="btn secondary" hidden>Install Khayal</button>
+    <div class="card">
+      <div class="micro-label">INSTALL</div>
+      <p class="note" id="installHelp"></p>
+      <button id="installBtn" class="btn dark full" hidden>Install Khayal</button>
     </div>
 
-    <div class="settings-group about">
-      <h2>About</h2>
-      <p class="settings-note">Khayal keeps your thoughts private — nothing ever leaves this device. Voice uses your device's built-in speech engine; Hindi speech is written in English letters, automatically.<br><br>Tiers: <b>✦ Core</b> — the khayals that define you. <b>★ High</b> — worth keeping. <b>Regular</b> — reviewed over time, purged when they fade.</p>
+    <div class="card">
+      <div class="micro-label">ABOUT</div>
+      <p class="note">Khayal keeps everything private — nothing ever leaves this device. Voice uses your phone's built-in speech engine, and Hindi is written in English letters automatically.<br><br><b>Core</b> — the khayals that define you. <b>High</b> — worth keeping. <b>Regular</b> — reviewed over time, purged when they fade.</p>
     </div>
   </section>
 </div>
 
 <!-- ============ TAB BAR ============ -->
-<nav class="tabbar">
+<nav class="tabbar" id="tabbar">
   <button class="tab active" data-screen="capture" aria-label="Capture">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
-    <span>Capture</span>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+    <span class="tab-label">Capture</span>
+  </button>
+  <button class="tab" data-screen="todos" aria-label="To-dos">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+    <span class="tab-label">To-dos</span>
+    <span class="dot" id="todoDot" hidden></span>
   </button>
   <button class="tab" data-screen="thoughts" aria-label="Khayals">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-    <span>Khayals</span>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+    <span class="tab-label">Khayals</span>
   </button>
   <button class="tab" data-screen="review" aria-label="Review">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-    <span>Review</span>
-    <span class="badge" id="reviewBadge" hidden></span>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+    <span class="tab-label">Review</span>
+    <span class="dot" id="reviewDot" hidden></span>
   </button>
   <button class="tab" data-screen="settings" aria-label="Settings">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-    <span>Settings</span>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    <span class="tab-label">Settings</span>
   </button>
 </nav>
 
-<!-- ============ DETAIL SHEET ============ -->
+<!-- ============ KHAYAL DETAIL SHEET ============ -->
 <div class="sheet-backdrop" id="sheetBackdrop" hidden>
   <div class="sheet" role="dialog" aria-modal="true">
     <div class="sheet-handle"></div>
+    <div class="micro-label">KHAYAL</div>
     <textarea id="detailText" rows="6"></textarea>
     <div class="sheet-tools">
-      <button id="detailPolish" class="mini-btn">✨ Polish</button>
-      <button id="detailCopy" class="mini-btn">Copy</button>
+      <button id="detailPolish" class="chip chip-accent">✨ Polish</button>
+      <button id="detailCopy" class="chip">Copy</button>
     </div>
-    <div class="tier-select">
+    <div class="micro-label mt">KEEP AS</div>
+    <div class="chip-row">
       <button class="chip tier-chip" data-tier="0">Regular</button>
-      <button class="chip tier-chip" data-tier="1">★ High</button>
-      <button class="chip tier-chip" data-tier="2">✦ Core</button>
+      <button class="chip tier-chip" data-tier="1">High</button>
+      <button class="chip tier-chip" data-tier="2">Core</button>
     </div>
     <p class="detail-meta" id="detailMeta"></p>
-    <div class="sheet-actions">
+    <div class="btn-row">
       <button id="detailPurge" class="btn danger">Purge</button>
-      <button id="detailSave" class="btn primary">Save</button>
+      <button id="detailSave" class="btn dark grow">Save</button>
     </div>
-    <button id="detailClose" class="btn ghost close-btn">Close</button>
+    <button id="detailClose" class="btn ghost full">Close</button>
+  </div>
+</div>
+
+<!-- ============ TODO DETAIL SHEET ============ -->
+<div class="sheet-backdrop" id="todoSheetBackdrop" hidden>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
+    <div class="micro-label">TO-DO</div>
+    <textarea id="todoText" rows="3"></textarea>
+    <div class="micro-label mt">WHEN</div>
+    <div class="chip-row">
+      <button class="chip tdue-chip" data-due="none">Someday</button>
+      <button class="chip tdue-chip" data-due="today">Today</button>
+      <button class="chip tdue-chip" data-due="tomorrow">Tomorrow</button>
+      <button class="chip tdue-chip" data-due="weekend">Weekend</button>
+    </div>
+    <div class="due-detail" id="tDueDetail" hidden>
+      <label class="field"><span class="micro-label">DATE</span><input type="date" id="tDueDate"></label>
+      <label class="field"><span class="micro-label">TIME</span><input type="time" id="tDueTime"></label>
+    </div>
+    <button id="todoIcs" class="btn light full">＋ Add to phone calendar</button>
+    <p class="note tiny">Puts it in your phone's own calendar with an alarm — so it alerts you even when Khayal is closed.</p>
+    <div class="btn-row">
+      <button id="todoDelete" class="btn danger">Delete</button>
+      <button id="todoSave" class="btn dark grow">Save</button>
+    </div>
+    <button id="todoClose" class="btn ghost full">Close</button>
   </div>
 </div>
 
 <!-- ============ ONBOARDING ============ -->
 <div class="onboard" id="onboard" hidden>
   <div class="onboard-card">
-    <div class="onboard-glyph">✦</div>
-    <h2 class="wordmark">Khayal</h2>
-    <p class="onboard-tag">Catch every khayal — before it fades.</p>
-    <div class="onboard-row"><span class="ob-ico">🎙</span><p><b>Bolo.</b> English ya Hindi — Hindi speech is written in English letters, ready to save.</p></div>
-    <div class="onboard-row"><span class="ob-ico">✦</span><p><b>Keep the best.</b> Promote khayals to ★ High and ✦ Core. Review resurfaces old ones; fading ones get flagged for purging.</p></div>
-    <div class="onboard-row"><span class="ob-ico">🔒</span><p><b>Private.</b> Everything stays on this device. Nothing is uploaded, ever.</p></div>
-    <button id="onboardDone" class="btn primary">Shuru karein ✦</button>
+    <div class="onboard-mark">✦</div>
+    <h2>Khayal</h2>
+    <p class="onboard-tag">Catch every thought — before it fades.</p>
+    <div class="ob-row"><span class="ob-ico">🎙</span><p><b>Bolo.</b> English ya Hindi — Hindi is written in English letters, cleaned up as you speak.</p></div>
+    <div class="ob-row"><span class="ob-ico">✓</span><p><b>To-dos too.</b> Same mic, same speed. Give one a time and it reminds you.</p></div>
+    <div class="ob-row"><span class="ob-ico">🔒</span><p><b>Private.</b> Everything stays on this device. Nothing is uploaded, ever.</p></div>
+    <button id="onboardDone" class="btn primary full">Shuru karein</button>
   </div>
 </div>
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
