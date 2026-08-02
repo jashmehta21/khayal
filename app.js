@@ -147,7 +147,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v14";                      // shown in Settings so we can confirm what's running
+const BUILD = "v15";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
 
@@ -199,12 +199,19 @@ async function smartCleanup(text) {
 }
 
 function friendlyApiError(status, detail) {
-  if (status === 400 && /API key not valid/i.test(detail)) return "That key isn't valid";
-  if (status === 401 || status === 403) return "Key rejected — check it's the right key";
+  const d = String(detail || "");
+  if (status === 400 && /API key not valid/i.test(d)) return "That key isn't valid";
+  // Workspace/Cloud specifics — these look like a key problem but aren't
+  if (/SERVICE_DISABLED|has not been used in project|is disabled/i.test(d))
+    return "The Generative Language API is switched off for this key's Google Cloud project. Enable it, or use a key from a personal Gmail account.";
+  if (/consumer|blocked|organization|policy|restricted/i.test(d) && status === 403)
+    return "Your Google Workspace admin policy is blocking AI Studio. Turn on Google AI Studio in the Admin console, or use a personal Gmail key.";
+  if (status === 401 || status === 403)
+    return "Key rejected. On a Workspace account this usually means AI Studio is off for your org — a personal Gmail key is the quick fix.";
   if (status === 404) return "That model name doesn't exist for your key";
   if (status === 429) return "Free-tier limit reached — try again later";
   if (status >= 500) return "Google's service is having trouble";
-  return detail ? detail.slice(0, 90) : "Request failed (" + status + ")";
+  return d ? d.slice(0, 140) : "Request failed (" + status + ")";
 }
 
 /* Smart when available, offline polish otherwise. Never throws. */
