@@ -529,6 +529,30 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .switch:checked { background: var(--dark); }
 .switch:checked::after { transform: translateX(19px); }
 
+/* smart cleanup config */
+#apiKey, #apiModel {
+  width: 100%; border: 1px solid var(--line); background: var(--card-2);
+  border-radius: 13px; padding: 12px 13px; margin-top: 5px;
+  font-family: var(--font); font-size: 0.9rem; font-weight: 600; color: var(--ink);
+  outline: none; transition: border-color 0.2s;
+}
+#apiKey:focus, #apiModel:focus { border-color: var(--dark); }
+#smartStatus { word-break: break-word; }
+.how { margin-top: 10px; }
+.how summary {
+  cursor: pointer; font-size: 0.82rem; font-weight: 700; color: var(--ink);
+  padding: 9px 0; list-style: none;
+}
+.how summary::-webkit-details-marker { display: none; }
+.how summary::before { content: "＋ "; color: var(--faint); }
+.how[open] summary::before { content: "－ "; }
+.how ol { margin: 4px 0 10px 18px; }
+.how li { color: var(--muted); font-size: 0.84rem; line-height: 1.7; font-weight: 500; }
+.how li b { color: var(--ink); }
+.how p { color: var(--muted); font-size: 0.8rem; line-height: 1.6; font-weight: 500; }
+
+.polish-chip:disabled { opacity: 0.6; }
+
 .trash-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
 .trash-item { display: flex; align-items: center; gap: 10px; background: var(--card-2); border-radius: 13px; padding: 11px 13px; font-size: 0.85rem; }
 .trash-item .t-text { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }

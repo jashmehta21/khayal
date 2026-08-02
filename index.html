@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=9">
+<link rel="stylesheet" href="app.css?v=10">
 </head>
 <body>
 
@@ -211,6 +211,38 @@
     </div>
 
     <div class="card">
+      <div class="micro-label">SMART CLEANUP</div>
+      <p class="note">Rewrites your dictation into clean, readable writing — like Wispr Flow. Free on Google's Gemini free tier, using your own key.</p>
+      <label class="switch-row" for="smartToggle">
+        <span class="switch-label">Smart cleanup
+          <em>Runs when you stop the mic. Falls back to offline polish if it fails.</em>
+        </span>
+        <input type="checkbox" id="smartToggle" class="switch">
+      </label>
+      <div id="smartConfig" hidden>
+        <div class="micro-label mt">API KEY</div>
+        <input type="password" id="apiKey" placeholder="Paste your Gemini key" autocomplete="off" spellcheck="false">
+        <div class="micro-label mt">MODEL</div>
+        <input type="text" id="apiModel" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
+        <div class="btn-row" style="margin-top:12px">
+          <button id="saveKeyBtn" class="btn dark">Save</button>
+          <button id="testKeyBtn" class="btn light">Test</button>
+        </div>
+        <p class="note tiny" id="smartStatus"></p>
+        <details class="how">
+          <summary>How to get a free key (2 minutes)</summary>
+          <ol>
+            <li>Open <b>aistudio.google.com/apikey</b> in your browser.</li>
+            <li>Sign in with your Google account.</li>
+            <li>Tap <b>Create API key</b>, then copy it.</li>
+            <li>Paste it above and tap <b>Save</b>.</li>
+          </ol>
+          <p>The key stays on this device only — it is never uploaded and never stored in the app's code. With smart cleanup on, the words you dictate are sent to Google to be rewritten; everything else in Khayal still stays on your phone.</p>
+        </details>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="micro-label">DICTATION</div>
       <label class="switch-row" for="autoPolishToggle">
         <span class="switch-label">Auto-polish my speech
@@ -360,6 +392,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

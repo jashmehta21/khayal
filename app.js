@@ -141,6 +141,83 @@ function polish(text) {
   return out;
 }
 
+/* ================= smart cleanup (optional, opt-in) =================
+   Sends the dictated words to Gemini to be rewritten as clean prose. The key
+   lives only in this browser's storage. Everything degrades to the offline
+   polish() above if it's off, keyless, slow or failing. */
+const SMART_TIMEOUT = 15000;
+const DEFAULT_MODEL = "gemini-2.5-flash";
+
+const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
+
+Rules:
+- Keep the original meaning, facts, opinions and first-person voice. Never add ideas, never summarise, never shorten meaningfully, never answer or comment on the content.
+- Remove filler words, stutters, repetitions and false starts.
+- Fix grammar, word errors and mishearings from speech recognition.
+- Add correct punctuation, capitalisation and paragraph breaks.
+- If the speaker mixes Hindi and English, write the Hindi words in English letters (Roman script) the way they sound — never Devanagari, and never translate them into English.
+- If the text is already clean, return it essentially unchanged.
+- Reply with the edited text only: no preamble, no explanation, no quotes, no markdown.
+
+Dictated text:
+`;
+
+function smartKey() { return localStorage.getItem("khayal-key") || ""; }
+function smartModel() { return localStorage.getItem("khayal-model") || DEFAULT_MODEL; }
+function smartEnabled() { return settings.smart === true && !!smartKey(); }
+
+async function smartCleanup(text) {
+  const key = smartKey();
+  if (!key) throw new Error("No API key saved");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(smartModel())}:generateContent?key=${encodeURIComponent(key)}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), SMART_TIMEOUT);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: CLEANUP_PROMPT + text }] }],
+        generationConfig: { temperature: 0.2, topP: 0.9 },
+      }),
+    });
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).error?.message || ""; } catch (_) {}
+      throw new Error(friendlyApiError(res.status, detail));
+    }
+    const data = await res.json();
+    const out = (data.candidates?.[0]?.content?.parts || [])
+      .map((p) => p.text || "").join("").trim();
+    if (!out) throw new Error("The model returned nothing");
+    return out;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function friendlyApiError(status, detail) {
+  if (status === 400 && /API key not valid/i.test(detail)) return "That key isn't valid";
+  if (status === 401 || status === 403) return "Key rejected — check it's the right key";
+  if (status === 404) return "That model name doesn't exist for your key";
+  if (status === 429) return "Free-tier limit reached — try again later";
+  if (status >= 500) return "Google's service is having trouble";
+  return detail ? detail.slice(0, 90) : "Request failed (" + status + ")";
+}
+
+/* Smart when available, offline polish otherwise. Never throws. */
+async function bestCleanup(text) {
+  if (!smartEnabled()) return { text: polish(text), smart: false };
+  try {
+    const cleaned = await smartCleanup(text);
+    return { text: cleaned, smart: true };
+  } catch (err) {
+    const msg = err.name === "AbortError" ? "Smart cleanup timed out" : err.message;
+    return { text: polish(text), smart: false, error: msg };
+  }
+}
+
 /* ================= auto titles =================
    Compresses a khayal into a short headline, locally and instantly: drop the
    hedging run-up people speak with, keep the first real clause, trim it to a
@@ -492,13 +569,17 @@ function startRecording() {
     updateMicUI();
   } catch (_) { $("micHint").textContent = "Couldn't start the mic — try again"; }
 }
-function stopRecording() {
+function stopRecording({ cleanup = false } = {}) {
   recording = false;
   clearTimeout(restartTimer);
   if (recog) { try { recog.stop(); } catch (_) {} }
   $("interim").textContent = "";
   releaseWakeLock();
   updateMicUI();
+  // finishing a dictation is exactly when the rewrite should happen
+  if (cleanup && smartEnabled() && $("transcript").value.trim()) {
+    setTimeout(() => runCleanup({ silent: true }), 250); // let the last result land
+  }
 }
 function updateMicUI() {
   const btn = $("micBtn");
@@ -509,7 +590,8 @@ function updateMicUI() {
     ? (settings.lang === "hi-IN" ? "Sun raha hoon… bolte jao" : "Listening… speak freely")
     : "Tap to speak";
 }
-$("micBtn").addEventListener("click", () => (recording ? stopRecording() : startRecording()));
+$("micBtn").addEventListener("click", () =>
+  recording ? stopRecording({ cleanup: true }) : startRecording());
 
 function onTranscriptInput() {
   const has = $("transcript").value.trim().length > 0;
@@ -523,19 +605,44 @@ $("transcript").addEventListener("keydown", (e) => {
 });
 
 let prePolish = null;
-$("polishBtn").addEventListener("click", () => {
+let cleaning = false;
+
+async function runCleanup({ silent = false } = {}) {
   const ta = $("transcript");
-  const before = ta.value;
-  const after = polish(before);
-  if (after === before) { toast("Already clean"); return; }
+  const before = ta.value.trim();
+  if (!before || cleaning) return;
+
+  const smart = smartEnabled();
+  if (smart) {
+    cleaning = true;
+    $("polishBtn").textContent = "✨ Polishing…";
+    $("polishBtn").disabled = true;
+    $("micHint").textContent = "Tidying up your words…";
+  }
+
+  const { text: after, smart: usedSmart, error } = await bestCleanup(before);
+
+  if (smart) {
+    cleaning = false;
+    $("polishBtn").textContent = "✨ Polish";
+    $("polishBtn").disabled = false;
+    if (!recording) $("micHint").textContent = "Tap to speak";
+  }
+
+  if (after === before) {
+    if (!silent) toast(error ? error : "Already clean");
+    return;
+  }
   prePolish = before;
   ta.value = after;
   onTranscriptInput();
   buzz(10);
-  toast("✨ Polished — tap to undo", () => {
-    ta.value = prePolish; prePolish = null; onTranscriptInput(); toast("Undone");
-  });
-});
+  toast(
+    error ? error + " — used offline polish" : usedSmart ? "✨ Cleaned up — tap to undo" : "✨ Polished — tap to undo",
+    () => { ta.value = prePolish; prePolish = null; onTranscriptInput(); toast("Undone"); }
+  );
+}
+$("polishBtn").addEventListener("click", () => runCleanup());
 
 /* due-date chips on the capture screen */
 let captureDue = "none";
@@ -1405,6 +1512,7 @@ function renderSettings() {
   renderTrash();
   renderInstallHelp();
   renderNotifState();
+  renderSmartState();
 }
 function renderTrash() {
   const list = $("trashList");
@@ -1429,6 +1537,54 @@ function renderTrash() {
 $("emptyTrashBtn").addEventListener("click", async () => {
   if (!confirm(`Permanently delete ${trash.length} purged khayal${trash.length > 1 ? "s" : ""}? This cannot be undone.`)) return;
   trash = []; await dbClear("trash"); renderSettings(); toast("Trash emptied");
+});
+
+/* ---- smart cleanup settings ---- */
+function renderSmartState() {
+  const on = settings.smart === true;
+  $("smartToggle").checked = on;
+  $("smartConfig").hidden = !on;
+  $("apiKey").value = smartKey();
+  $("apiModel").value = smartModel();
+  const s = $("smartStatus");
+  if (!on) { s.textContent = ""; return; }
+  s.textContent = smartKey()
+    ? "Key saved on this device. Tap Test to check it works."
+    : "Add a key below to switch this on.";
+}
+$("smartToggle").addEventListener("change", (e) => {
+  settings.smart = e.target.checked;
+  saveSettings();
+  renderSmartState();
+  toast(e.target.checked ? "Smart cleanup on" : "Smart cleanup off");
+});
+$("saveKeyBtn").addEventListener("click", () => {
+  const k = $("apiKey").value.trim();
+  const m = $("apiModel").value.trim() || DEFAULT_MODEL;
+  if (k) localStorage.setItem("khayal-key", k); else localStorage.removeItem("khayal-key");
+  localStorage.setItem("khayal-model", m);
+  renderSmartState();
+  toast(k ? "Saved on this device" : "Key removed");
+});
+$("testKeyBtn").addEventListener("click", async () => {
+  const k = $("apiKey").value.trim();
+  const m = $("apiModel").value.trim() || DEFAULT_MODEL;
+  if (!k) { $("smartStatus").textContent = "Paste a key first."; return; }
+  localStorage.setItem("khayal-key", k);
+  localStorage.setItem("khayal-model", m);
+  $("smartStatus").textContent = "Testing…";
+  $("testKeyBtn").disabled = true;
+  try {
+    const out = await smartCleanup("um so i was thinking that uh maybe this thing it works you know");
+    $("smartStatus").textContent = "Working ✓  →  " + out.slice(0, 90);
+    toast("Smart cleanup is live");
+  } catch (err) {
+    const msg = err.name === "AbortError" ? "Timed out — check your connection" : err.message;
+    $("smartStatus").textContent = "✕ " + msg;
+    toast("Test failed");
+  } finally {
+    $("testKeyBtn").disabled = false;
+  }
 });
 
 $("autoPolishToggle").addEventListener("change", (e) => {
