@@ -1,10 +1,11 @@
 /* Khayal service worker — makes the app work fully offline. */
-const VERSION = "khayal-v1";
+/* Bump VERSION and the ?v= tags in index.html together when shipping changes. */
+const VERSION = "khayal-v4";
 const ASSETS = [
   "./",
   "./index.html",
-  "./app.css",
-  "./app.js",
+  "./app.css?v=3",
+  "./app.js?v=3",
   "./manifest.webmanifest",
   "./fonts/outfit.woff2",
   "./icons/icon-192.png",
@@ -26,13 +27,32 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-/* Stale-while-revalidate: instant load from cache, silently fetch updates
-   in the background so the next launch runs the newest version. */
+/* Navigations are network-first so a new version shows up immediately (falling
+   back to cache when offline). Other assets are stale-while-revalidate: instant
+   from cache, refreshed in the background. */
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET" || !e.request.url.startsWith(self.location.origin)) return;
+
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request)
+        .then((resp) => {
+          const copy = resp.clone();
+          e.waitUntil(caches.open(VERSION).then((c) => c.put("./index.html", copy)));
+          return resp;
+        })
+        .catch(async () => {
+          const cache = await caches.open(VERSION);
+          return (await cache.match("./index.html")) || Response.error();
+        })
+    );
+    return;
+  }
+
   e.respondWith(
     caches.open(VERSION).then(async (cache) => {
-      const cached = await cache.match(e.request, { ignoreSearch: true });
+      // match on the full URL — the ?v= tag is what makes a new build a new file
+      const cached = await cache.match(e.request);
       const network = fetch(e.request)
         .then((resp) => {
           if (resp && resp.ok) cache.put(e.request, resp.clone());
@@ -41,9 +61,7 @@ self.addEventListener("fetch", (e) => {
         .catch(() => undefined);
       if (cached) { e.waitUntil(network); return cached; }
       const resp = await network;
-      if (resp) return resp;
-      if (e.request.mode === "navigate") return cache.match("./index.html");
-      return Response.error();
+      return resp || Response.error();
     })
   );
 });

@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/outfit.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=3">
 </head>
 <body>
 
@@ -30,6 +30,7 @@
       <div class="transcript-wrap">
         <textarea id="transcript" placeholder="Bolo ya likho — jo bhi mann mein hai…" rows="5"></textarea>
         <div id="interim" class="interim" aria-live="polite"></div>
+        <button id="polishBtn" class="polish-chip" hidden>✨ Polish</button>
       </div>
 
       <div class="seg-control" role="tablist" aria-label="Voice language">
@@ -94,6 +95,22 @@
     </header>
 
     <div class="settings-group">
+      <h2>Dictation</h2>
+      <label class="switch-row" for="autoPolishToggle">
+        <span class="switch-label">Auto-polish my speech
+          <em>Adds punctuation, capital letters, removes "um", "matlab"…</em>
+        </span>
+        <input type="checkbox" id="autoPolishToggle" class="switch">
+      </label>
+      <label class="switch-row" for="autoSaveToggle">
+        <span class="switch-label">Keep screen awake while recording
+          <em>Your phone won't sleep mid-thought</em>
+        </span>
+        <input type="checkbox" id="autoSaveToggle" class="switch">
+      </label>
+    </div>
+
+    <div class="settings-group">
       <h2>Backup</h2>
       <p class="settings-note">Your khayals live only on this device. Export a backup file regularly, and import it on your other devices to move them across.</p>
       <div class="settings-row">
@@ -151,6 +168,10 @@
   <div class="sheet" role="dialog" aria-modal="true">
     <div class="sheet-handle"></div>
     <textarea id="detailText" rows="6"></textarea>
+    <div class="sheet-tools">
+      <button id="detailPolish" class="mini-btn">✨ Polish</button>
+      <button id="detailCopy" class="mini-btn">Copy</button>
+    </div>
     <div class="tier-select">
       <button class="chip tier-chip" data-tier="0">Regular</button>
       <button class="chip tier-chip" data-tier="1">★ High</button>
@@ -180,6 +201,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="app.js"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

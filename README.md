@@ -22,7 +22,16 @@ Khayal becomes a real app icon that works fully offline.
 - **Capture** — tap the mic and speak. English ya Hindi — Hindi speech is
   automatically written in English letters ("zindagi", not "ज़िंदगी").
   You can edit before saving. Typing works too.
-- **Khayals** — everything you've caught, searchable, newest first.
+- **Auto-polish** — raw dictation is cleaned up as you speak: sentences get
+  capital letters and full stops (your natural pauses become the sentence
+  breaks, a long pause starts a new paragraph), and fillers like "um", "uh",
+  "you know", "matlab", "yaani" are dropped. Say "full stop", "comma",
+  "question mark", or "new line" and you get the punctuation.
+  Tap **✨ Polish** to clean text up manually — tap the toast to undo.
+  Turn the whole thing off in Settings → Dictation.
+- **Khayals** — everything you've caught, grouped by day (Today, Yesterday,
+  weekday, then date). Each card shows its opening line as a headline with a
+  dimmed preview underneath. Searchable, newest first.
 - **Tiers** — promote what matters: ★ High → ✦ Core (your core memories).
 - **Review** — old khayals come back as cards: Keep / Promote / Later / Purge.
   Anything untouched for 30+ days is flagged as *fading* so you know what to let go.
@@ -37,5 +46,11 @@ No cloud, no account, no tracking. Export a backup now and then to be safe.
 
 ## For future updates (note to developers)
 
-Plain HTML/CSS/JS, no build step. After changing any file, bump `VERSION`
-in `sw.js` so installed copies pick up the update on their next launch.
+Plain HTML/CSS/JS, no build step. When shipping a change, bump **both**:
+
+1. the `?v=` tags on `app.css` / `app.js` in `index.html`, and
+2. `VERSION` plus the matching `?v=` entries in `sw.js`'s `ASSETS`.
+
+They must agree — the service worker caches by full URL, so the `?v=` tag is
+what tells a browser a file is genuinely new. Navigations are network-first,
+so a new version appears on the next launch (and still works offline).

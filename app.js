@@ -93,6 +93,82 @@ function transliterate(text) {
     .join("");
 }
 
+/* ================= polish: raw dictation → readable text =================
+   Speech comes out as one long unpunctuated run full of "um" and "matlab".
+   This cleans it up locally — no AI, no internet, instant. */
+
+// Spoken punctuation: say "full stop" and get "."
+const SPOKEN_MARKS = [
+  [/\b(?:full stop|fullstop|period)\b/gi, "."],
+  [/\b(?:question mark)\b/gi, "?"],
+  [/\b(?:exclamation (?:mark|point))\b/gi, "!"],
+  [/\b(?:comma)\b/gi, ","],
+  [/\b(?:new paragraph|next paragraph)\b/gi, "\n\n"],
+  [/\b(?:new line|next line|nayi line)\b/gi, "\n"],
+];
+
+// Disfluencies only — never words that carry meaning.
+const FILLERS = [
+  "um", "umm", "ummm", "uh", "uhh", "uhhh", "uhm", "er", "err", "erm",
+  "ah", "ahh", "hmm", "hmmm", "mmm", "mm",
+  "you know", "i mean", "matlab", "yaani", "yani", "arre", "arey",
+];
+const FILLER_RE = new RegExp(
+  "(^|[\\s,.!?\\n])(?:" + FILLERS.join("|") + ")(?=[\\s,.!?\\n]|$)",
+  "gi"
+);
+
+// Stutters worth collapsing — function words people repeat while thinking.
+// Content words are left alone ("very very good" is intentional).
+const STUTTER_WORDS = new Set([
+  "i", "the", "a", "an", "and", "but", "so", "to", "of", "in", "is", "it",
+  "that", "this", "we", "you", "he", "she", "they", "my", "me", "was", "for",
+  "main", "mein", "ki", "ka", "ke", "hai", "toh", "aur", "ye", "wo", "woh",
+]);
+
+function collapseStutters(text) {
+  return text.replace(/\b(\w+)((?:\s+\1\b)+)/gi, (m, word) =>
+    STUTTER_WORDS.has(word.toLowerCase()) ? word : m
+  );
+}
+
+// "i think" → "I think"; also i'm / i'll / i've / i'd
+function fixFirstPerson(text) {
+  return text.replace(/\bi\b(['’](?:m|ll|ve|d))?/g, (m, suffix) => "I" + (suffix || ""));
+}
+
+function capitalizeSentences(text) {
+  // capitalize after ., ?, !, newline, and at the very start
+  return text.replace(/(^|[.!?]\s+|\n\s*)([a-z])/g, (m, lead, ch) => lead + ch.toUpperCase());
+}
+
+function tidySpacing(text) {
+  return text
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")        // no space before punctuation
+    .replace(/([,;:])(?=\S)/g, "$1 ")       // space after comma
+    .replace(/([.!?])(?=[A-Za-z])/g, "$1 ") // space after sentence end
+    .replace(/([.!?]){2,}/g, "$1")          // ".." → "."
+    .replace(/,\s*([.!?])/g, "$1")          // ", ." → "."
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function polish(text) {
+  if (!text || !text.trim()) return text;
+  let out = text;
+  for (const [re, rep] of SPOKEN_MARKS) out = out.replace(re, rep);
+  out = out.replace(FILLER_RE, "$1");
+  out = collapseStutters(out);
+  out = tidySpacing(out);
+  out = fixFirstPerson(out);
+  out = capitalizeSentences(out);
+  // close the last sentence if the speaker just trailed off
+  if (out && !/[.!?…]$/.test(out)) out += ".";
+  return out;
+}
+
 /* ================= IndexedDB ================= */
 let db;
 function openDB() {
@@ -177,12 +253,16 @@ function tierBadge(t) {
   return "";
 }
 let toastTimer;
-function toast(msg) {
+function toast(msg, onTap) {
   const el = $("toast");
   el.textContent = msg;
   el.hidden = false;
+  el.classList.toggle("tappable", !!onTap);
+  el.onclick = onTap
+    ? () => { el.hidden = true; clearTimeout(toastTimer); onTap(); }
+    : null;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), 1800);
+  toastTimer = setTimeout(() => (el.hidden = true), onTap ? 6500 : 1800);
 }
 
 /* ================= navigation ================= */
@@ -255,13 +335,47 @@ function buildRecognizer() {
   return r;
 }
 
+/* Each final result lands at a natural pause in your speech, so those pauses
+   become the sentence breaks — far more accurate than guessing from the words.
+   A long silence (2.5s+) starts a new paragraph. */
+let lastFinalAt = 0;
+const PARA_GAP = 2500;
+
 function appendFinal(text) {
   const ta = $("transcript");
+  let chunk = text.trim();
+  if (!chunk) return;
   const cur = ta.value;
-  const sep = cur && !/\s$/.test(cur) ? " " : "";
-  ta.value = cur + sep + text.trim();
+
+  if (settings.autoPolish !== false) {
+    const gap = lastFinalAt ? now() - lastFinalAt : 0;
+    const newPara = cur && gap > PARA_GAP;
+    chunk = polish(chunk);
+    if (!chunk.trim()) { lastFinalAt = now(); return; } // segment was pure filler
+    if (!cur) ta.value = chunk;
+    else ta.value = cur.replace(/\s+$/, "") + (newPara ? "\n\n" : " ") + chunk;
+  } else {
+    const sep = cur && !/\s$/.test(cur) ? " " : "";
+    ta.value = cur + sep + chunk;
+  }
+  lastFinalAt = now();
   onTranscriptInput();
 }
+
+/* keep the phone awake so it can't sleep mid-thought */
+let wakeLock = null;
+async function acquireWakeLock() {
+  if (settings.wakeLock === false || !("wakeLock" in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request("screen"); } catch (_) {}
+}
+function releaseWakeLock() {
+  if (wakeLock) { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && recording && !wakeLock) acquireWakeLock();
+});
+
+function buzz(ms) { if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} } }
 
 function startRecording() {
   if (!SR) {
@@ -272,6 +386,9 @@ function startRecording() {
     recog = buildRecognizer();
     recog.start();
     recording = true;
+    lastFinalAt = 0;
+    buzz(12);
+    acquireWakeLock();
     updateMicUI();
   } catch (_) {
     $("micHint").textContent = "Couldn't start the mic — try again";
@@ -282,6 +399,7 @@ function stopRecording() {
   clearTimeout(restartTimer);
   if (recog) { try { recog.stop(); } catch (_) {} }
   $("interim").textContent = "";
+  releaseWakeLock();
   updateMicUI();
 }
 function updateMicUI() {
@@ -298,8 +416,28 @@ $("micBtn").addEventListener("click", () => (recording ? stopRecording() : start
 function onTranscriptInput() {
   const has = $("transcript").value.trim().length > 0;
   $("captureActions").hidden = !has;
+  $("polishBtn").hidden = !has;
   localStorage.setItem("khayal-draft", $("transcript").value);
 }
+
+/* manual polish, with one-tap undo */
+let prePolish = null;
+$("polishBtn").addEventListener("click", () => {
+  const ta = $("transcript");
+  const before = ta.value;
+  const after = polish(before);
+  if (after === before) { toast("Already clean ✓"); return; }
+  prePolish = before;
+  ta.value = after;
+  onTranscriptInput();
+  buzz(10);
+  toast("✨ Polished — tap to undo", () => {
+    ta.value = prePolish;
+    prePolish = null;
+    onTranscriptInput();
+    toast("Undone");
+  });
+});
 $("transcript").addEventListener("input", onTranscriptInput);
 $("transcript").addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") saveThought();
@@ -323,6 +461,7 @@ async function saveThought() {
   onTranscriptInput();
   updateTodayStat();
   updateReviewBadge();
+  buzz(14);
   toast("✦ Khayal saved");
 }
 $("saveBtn").addEventListener("click", saveThought);
@@ -370,17 +509,51 @@ function renderList() {
     }</div>`;
     return;
   }
-  list.innerHTML = items
-    .map(
-      (t) => `<div class="thought-card tier-${t.tier}${isFading(t) ? " fading" : ""}" data-id="${t.id}">
-        <div class="thought-text">${esc(t.text)}</div>
-        <div class="thought-meta">${tierBadge(t)}<span>${relTime(t.createdAt)}</span>${isFading(t) ? '<span class="fade-tag">fading</span>' : ""}</div>
-      </div>`
-    )
-    .join("");
+
+  let html = "";
+  let lastGroup = null;
+  for (const t of items) {
+    const g = dayGroup(t.createdAt);
+    if (g !== lastGroup) {
+      html += `<div class="day-head"><span>${g}</span></div>`;
+      lastGroup = g;
+    }
+    const { title, rest } = splitPreview(t.text);
+    html += `<div class="thought-card tier-${t.tier}${isFading(t) ? " fading" : ""}" data-id="${t.id}">
+      <div class="thought-title">${esc(title)}</div>
+      ${rest ? `<div class="thought-preview">${esc(rest)}</div>` : ""}
+      <div class="thought-meta">${tierBadge(t)}<span>${clockTime(t.createdAt)}</span>${isFading(t) ? '<span class="fade-tag">fading</span>' : ""}</div>
+    </div>`;
+  }
+  list.innerHTML = html;
   list.querySelectorAll(".thought-card").forEach((el) =>
     el.addEventListener("click", () => openDetail(el.dataset.id))
   );
+}
+
+/* first sentence becomes the headline, the rest is dimmed preview */
+function splitPreview(text) {
+  const clean = text.trim();
+  const m = clean.match(/^[\s\S]{0,110}?[.!?…](\s|$)|^[^\n]{0,110}(\n|$)/);
+  let title = m ? m[0].trim() : clean.slice(0, 110);
+  if (!title) title = clean.slice(0, 110);
+  const rest = clean.slice(title.length).trim().replace(/\s+/g, " ");
+  return { title, rest };
+}
+
+function dayGroup(ts) {
+  const d = new Date(ts), t = new Date();
+  const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(t) - startOf(d)) / DAY);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+  if (d.getFullYear() === t.getFullYear())
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "long" });
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+}
+function clockTime(ts) {
+  return new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 /* ================= detail sheet ================= */
@@ -402,6 +575,21 @@ function updateTierChips() {
 document.querySelectorAll(".tier-chip").forEach((c) =>
   c.addEventListener("click", () => { detailTier = Number(c.dataset.tier); updateTierChips(); })
 );
+$("detailPolish").addEventListener("click", () => {
+  const ta = $("detailText");
+  const before = ta.value;
+  const after = polish(before);
+  if (after === before) { toast("Already clean ✓"); return; }
+  ta.value = after;
+  buzz(10);
+  toast("✨ Polished — tap to undo", () => { ta.value = before; toast("Undone"); });
+});
+$("detailCopy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("detailText").value);
+    toast("Copied");
+  } catch { toast("Couldn't copy"); }
+});
 $("detailClose").addEventListener("click", closeDetail);
 $("sheetBackdrop").addEventListener("click", (e) => { if (e.target === $("sheetBackdrop")) closeDetail(); });
 function closeDetail() { $("sheetBackdrop").hidden = true; detailId = null; }
@@ -638,6 +826,19 @@ $("installBtn").addEventListener("click", async () => {
   renderInstallHelp();
 });
 
+/* ---- preference switches ---- */
+$("autoPolishToggle").addEventListener("change", (e) => {
+  settings.autoPolish = e.target.checked;
+  saveSettings();
+  toast(e.target.checked ? "Auto-polish on ✨" : "Auto-polish off");
+});
+$("autoSaveToggle").addEventListener("change", (e) => {
+  settings.wakeLock = e.target.checked;
+  saveSettings();
+  if (!e.target.checked) releaseWakeLock();
+  else if (recording) acquireWakeLock();
+});
+
 /* ================= onboarding ================= */
 $("onboardDone").addEventListener("click", () => {
   settings.onboarded = true;
@@ -653,6 +854,8 @@ $("onboardDone").addEventListener("click", () => {
   await cleanOldTrash();
 
   setLang(settings.lang || "en-IN");
+  $("autoPolishToggle").checked = settings.autoPolish !== false;
+  $("autoSaveToggle").checked = settings.wakeLock !== false;
   const draft = localStorage.getItem("khayal-draft");
   if (draft) { $("transcript").value = draft; }
   onTranscriptInput();
