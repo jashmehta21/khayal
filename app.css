@@ -20,13 +20,19 @@
   --dark: #16140f;
   --green: #2f9e6b;
   --green-soft: #e4f4ec;
+  /* second tier colour — warm ochre, clearly distinct from the coral of Core */
+  --high: #b07d16;
+  --high-soft: #f9efd9;
 
   --r-card: 24px;
   --r-inner: 16px;
   --pill: 999px;
 
-  --tabbar-h: 62px;
+  /* the bar's own height; the safe area is added on top so it always reaches
+     the physical bottom edge on every phone */
+  --tabbar-h: 58px;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --tabbar-total: calc(var(--tabbar-h) + var(--safe-b));
 
   --font: "Jakarta", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -51,7 +57,7 @@ html, body {
   max-width: 520px;
   margin: 0 auto;
   min-height: 100dvh;
-  padding: calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(var(--tabbar-h) + var(--safe-b) + 42px);
+  padding: calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(var(--tabbar-total) + 26px);
 }
 
 /* ---------- screens & transitions ---------- */
@@ -149,6 +155,11 @@ h3 { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.02em; }
 }
 .chip:active { transform: scale(0.94); }
 .chip.active { background: var(--dark); color: #fff; border-color: var(--dark); }
+/* picking a tier previews its colour */
+.tier-chip.active[data-tier="2"],
+.filter-chip.active[data-filter="core"] { background: var(--accent); border-color: var(--accent); }
+.tier-chip.active[data-tier="1"],
+.filter-chip.active[data-filter="high"] { background: var(--high); border-color: var(--high); }
 .chip-accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .chip-row.scroll-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 10px 0 14px; }
@@ -374,13 +385,15 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .thought-list { display: flex; flex-direction: column; gap: 9px; }
 .thought-card {
   background: var(--card); border-radius: var(--r-inner); padding: 15px 16px;
-  cursor: pointer; border-left: 3px solid transparent;
+  cursor: pointer; border-left: 5px solid transparent;
   animation: itemIn 0.45s var(--ease) both;
   transition: transform 0.2s var(--ease);
 }
 .thought-card:active { transform: scale(0.985); }
-.thought-card.tier-2 { border-left-color: var(--accent); }
-.thought-card.tier-1 { border-left-color: var(--ink); }
+/* Core and High get their own colour AND a tinted card, so the tier reads at a
+   glance instead of hiding in a hairline */
+.thought-card.tier-2 { border-left-color: var(--accent); background: var(--accent-soft); }
+.thought-card.tier-1 { border-left-color: var(--high); background: var(--high-soft); }
 .thought-card.fading { opacity: 0.55; }
 .thought-title {
   font-size: 0.98rem; font-weight: 700; line-height: 1.45; letter-spacing: -0.015em;
@@ -393,9 +406,12 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
   word-break: break-word;
 }
 .thought-meta { display: flex; gap: 9px; align-items: center; margin-top: 9px; color: var(--faint); font-size: 0.74rem; font-weight: 700; }
-.tier-badge { font-weight: 800; letter-spacing: 0.02em; }
-.tier-badge.t2 { color: var(--accent); }
-.tier-badge.t1 { color: var(--ink); }
+.tier-badge {
+  font-weight: 800; letter-spacing: 0.06em; font-size: 0.66rem;
+  padding: 3px 8px; border-radius: var(--pill); color: #fff;
+}
+.tier-badge.t2 { background: var(--accent); }
+.tier-badge.t1 { background: var(--high); }
 .fade-tag { color: var(--accent); }
 
 .day-head {
@@ -519,16 +535,21 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .trash-item button { background: none; border: none; color: var(--ink); font-weight: 800; cursor: pointer; font-family: var(--font); font-size: 0.8rem; }
 
 /* ---------- tab bar ---------- */
+/* Sits flush against the physical bottom of the screen on every device: the
+   bar's height is its own 58px plus whatever the phone reserves for its home
+   indicator, and that reserve becomes bottom padding so the icons clear it. */
 .tabbar {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--safe-b) + 12px);
-  width: min(calc(100% - 24px), 496px); height: var(--tabbar-h);
-  background: rgba(255,255,255,0.86);
+  bottom: 0;
+  width: 100%; max-width: 520px;
+  height: var(--tabbar-total);
+  padding: 0 8px var(--safe-b);
+  background: rgba(255,255,255,0.92);
   -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
-  border-radius: var(--pill);
+  border-radius: 22px 22px 0 0;
   display: flex; align-items: center; justify-content: space-around;
-  z-index: 50; padding: 0 7px;
-  box-shadow: 0 8px 30px rgba(20,18,15,0.12);
+  z-index: 50;
+  box-shadow: 0 -0.5px 0 var(--line), 0 -6px 26px rgba(20, 18, 15, 0.07);
 }
 .tab {
   position: relative; height: 46px; border: none; background: none; cursor: pointer;
@@ -600,7 +621,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 
 /* ---------- toast ---------- */
 .toast {
-  position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + var(--safe-b) + 26px);
+  position: fixed; left: 50%; bottom: calc(var(--tabbar-total) + 16px);
   transform: translateX(-50%);
   background: var(--dark); color: #fff; border-radius: var(--pill);
   padding: 13px 22px; font-size: 0.88rem; font-weight: 700; letter-spacing: -0.01em;
