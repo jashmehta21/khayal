@@ -3,7 +3,64 @@
    it to real semantic embeddings, computed once per khayal then reused offline. */
 "use strict";
 
-const EMBED_MODEL = "text-embedding-004";
+/* Model names change over time, so nothing is hardcoded as truth: these are
+   only the starting guesses, replaced by whatever the key actually offers. */
+const DEFAULT_EMBED_MODEL = "text-embedding-004";
+function embedModel() { return localStorage.getItem("khayal-embed-model") || DEFAULT_EMBED_MODEL; }
+
+/* Ask the API what this key can actually use. */
+async function listModels() {
+  const key = smartKey();
+  if (!key) throw new Error("No API key");
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=200`,
+      { signal: ctrl.signal });
+    if (!res.ok) {
+      let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
+      throw new Error(friendlyApiError(res.status, d));
+    }
+    const data = await res.json();
+    const all = (data.models || []).map((m) => ({
+      id: String(m.name || "").replace(/^models\//, ""),
+      methods: m.supportedGenerationMethods || [],
+    }));
+    return {
+      chat: all.filter((m) => m.methods.includes("generateContent")).map((m) => m.id),
+      embed: all.filter((m) => m.methods.includes("embedContent")).map((m) => m.id),
+    };
+  } finally { clearTimeout(timer); }
+}
+
+/* Prefer something fast and current; fall back to whatever exists. */
+function pickChatModel(ids) {
+  const score = (id) => {
+    let s = 0;
+    if (/flash/.test(id)) s += 40;
+    if (/lite/.test(id)) s += 5;
+    if (/latest/.test(id)) s += 12;
+    if (/pro/.test(id)) s += 8;
+    const v = /(\d+)\.(\d+)/.exec(id);
+    if (v) s += Number(v[1]) * 6 + Number(v[2]);
+    if (/preview|exp|thinking|tuning|vision|image|audio|tts|live/.test(id)) s -= 30;
+    return s;
+  };
+  return [...ids].sort((a, b) => score(b) - score(a))[0] || null;
+}
+function pickEmbedModel(ids) {
+  const score = (id) => {
+    let s = 0;
+    if (/embedding/.test(id)) s += 20;
+    if (/text-embedding/.test(id)) s += 10;
+    const v = /(\d+)/.exec(id.replace(/[^0-9]/g, " ").trim());
+    if (v) s += Number(v[1]);
+    if (/exp|preview/.test(id)) s -= 15;
+    return s;
+  };
+  return [...ids].sort((a, b) => score(b) - score(a))[0] || null;
+}
 const NEIGHBOURS = 4;      // links kept per khayal — caps density so it never hairballs
 /* Two different scales: embedding cosines sit high (related ≈ 0.6+), word
    overlap sits very low (a strong lexical match is ≈ 0.2). One threshold for
@@ -81,13 +138,13 @@ function cosine(a, b) {
 async function embedOne(text) {
   const key = smartKey();
   if (!key) throw new Error("No API key");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${encodeURIComponent(key)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${embedModel()}:embedContent?key=${encodeURIComponent(key)}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
     const res = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-      body: JSON.stringify({ model: "models/" + EMBED_MODEL, content: { parts: [{ text: text.slice(0, 8000) }] } }),
+      body: JSON.stringify({ model: "models/" + embedModel(), content: { parts: [{ text: text.slice(0, 8000) }] } }),
     });
     if (!res.ok) {
       let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
@@ -103,14 +160,14 @@ async function embedOne(text) {
 async function embedBatch(texts) {
   const key = smartKey();
   if (!key) throw new Error("No API key");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:batchEmbedContents?key=${encodeURIComponent(key)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${embedModel()}:batchEmbedContents?key=${encodeURIComponent(key)}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30000);
   try {
     const res = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
       body: JSON.stringify({
-        requests: texts.map((t) => ({ model: "models/" + EMBED_MODEL, content: { parts: [{ text: t.slice(0, 8000) }] } })),
+        requests: texts.map((t) => ({ model: "models/" + embedModel(), content: { parts: [{ text: t.slice(0, 8000) }] } })),
       }),
     });
     if (!res.ok) {
@@ -137,7 +194,7 @@ async function embedMissing(onProgress) {
       for (let j = 0; j < chunk.length; j++) {
         if (!vecs[j]) continue;
         chunk[j].vec = vecs[j];
-        chunk[j].vecModel = EMBED_MODEL;
+        chunk[j].vecModel = embedModel();
         await dbPut("thoughts", chunk[j]);
         done++;
       }

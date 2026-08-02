@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=12">
+<link rel="stylesheet" href="app.css?v=13">
 </head>
 <body>
 
@@ -272,8 +272,11 @@
       <div id="smartConfig" hidden>
         <div class="micro-label mt">API KEY</div>
         <input type="password" id="apiKey" placeholder="Paste your Gemini key" autocomplete="off" spellcheck="false">
-        <div class="micro-label mt">MODEL</div>
-        <input type="text" id="apiModel" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
+        <div class="label-row mt">
+          <span class="micro-label">MODEL</span>
+          <button id="findModelsBtn" class="chip tiny-chip">↻ Find models</button>
+        </div>
+        <select id="apiModel" class="field-select"></select>
         <div class="btn-row" style="margin-top:12px">
           <button id="saveKeyBtn" class="btn dark">Save</button>
           <button id="testKeyBtn" class="btn light">Test</button>
@@ -467,7 +470,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="mind.js?v=1"></script>
-<script src="app.js?v=12"></script>
+<script src="mind.js?v=2"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

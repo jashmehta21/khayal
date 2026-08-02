@@ -1726,43 +1726,96 @@ $("emptyTrashBtn").addEventListener("click", async () => {
 });
 
 /* ---- smart cleanup settings ---- */
+function setModelOptions(ids, selected) {
+  const sel = $("apiModel");
+  const list = ids && ids.length ? [...new Set(ids)] : [selected || smartModel()];
+  sel.innerHTML = list.map((id) =>
+    `<option value="${esc(id)}"${id === selected ? " selected" : ""}>${esc(id)}</option>`).join("");
+  sel.value = selected && list.includes(selected) ? selected : list[0];
+}
+
+/* Ask the key what it can run, remember the best chat + embedding models. */
+async function discoverModels({ quiet = false } = {}) {
+  const { chat, embed } = await listModels();
+  const best = pickChatModel(chat);
+  const bestEmbed = pickEmbedModel(embed);
+  if (bestEmbed) localStorage.setItem("khayal-embed-model", bestEmbed);
+  const current = smartModel();
+  const chosen = chat.includes(current) ? current : best;
+  if (chosen) localStorage.setItem("khayal-model", chosen);
+  setModelOptions(chat, chosen);
+  if (!quiet) {
+    $("smartStatus").textContent = `Found ${chat.length} models. Using ${chosen || "none"}${bestEmbed ? " · embeddings: " + bestEmbed : ""}.`;
+  }
+  return { chat, embed, chosen, bestEmbed };
+}
+
 function renderSmartState() {
   const on = settings.smart === true;
   $("smartToggle").checked = on;
   $("smartConfig").hidden = !on;
   $("apiKey").value = smartKey();
-  $("apiModel").value = smartModel();
+  if (!$("apiModel").options.length) setModelOptions(null, smartModel());
+  else $("apiModel").value = smartModel();
   const s = $("smartStatus");
   if (!on) { s.textContent = ""; return; }
   s.textContent = smartKey()
     ? "Key saved on this device. Tap Test to check it works."
     : "Add a key below to switch this on.";
 }
+
+$("apiModel").addEventListener("change", (e) => {
+  localStorage.setItem("khayal-model", e.target.value);
+  $("smartStatus").textContent = "Using " + e.target.value + ".";
+});
+$("findModelsBtn").addEventListener("click", async () => {
+  const k = $("apiKey").value.trim();
+  if (!k) { $("smartStatus").textContent = "Paste a key first."; return; }
+  localStorage.setItem("khayal-key", k);
+  $("smartStatus").textContent = "Asking Google what your key can use…";
+  $("findModelsBtn").disabled = true;
+  try { await discoverModels(); toast("Models found"); }
+  catch (err) { $("smartStatus").textContent = "✕ " + (err.name === "AbortError" ? "Timed out" : err.message); }
+  finally { $("findModelsBtn").disabled = false; }
+});
 $("smartToggle").addEventListener("change", (e) => {
   settings.smart = e.target.checked;
   saveSettings();
   renderSmartState();
   toast(e.target.checked ? "Smart cleanup on" : "Smart cleanup off");
 });
-$("saveKeyBtn").addEventListener("click", () => {
+$("saveKeyBtn").addEventListener("click", async () => {
   const k = $("apiKey").value.trim();
-  const m = $("apiModel").value.trim() || DEFAULT_MODEL;
   if (k) localStorage.setItem("khayal-key", k); else localStorage.removeItem("khayal-key");
-  localStorage.setItem("khayal-model", m);
+  if ($("apiModel").value) localStorage.setItem("khayal-model", $("apiModel").value);
   renderSmartState();
   toast(k ? "Saved on this device" : "Key removed");
+  // fill the model list straight away so the picker is never guesswork
+  if (k) { try { await discoverModels(); } catch (_) {} }
 });
+
 $("testKeyBtn").addEventListener("click", async () => {
   const k = $("apiKey").value.trim();
-  const m = $("apiModel").value.trim() || DEFAULT_MODEL;
   if (!k) { $("smartStatus").textContent = "Paste a key first."; return; }
   localStorage.setItem("khayal-key", k);
-  localStorage.setItem("khayal-model", m);
+  if ($("apiModel").value) localStorage.setItem("khayal-model", $("apiModel").value);
   $("smartStatus").textContent = "Testing…";
   $("testKeyBtn").disabled = true;
+  const sample = "um so i was thinking that uh maybe this thing it works you know";
   try {
-    const out = await smartCleanup("um so i was thinking that uh maybe this thing it works you know");
-    $("smartStatus").textContent = "Working ✓  →  " + out.slice(0, 90);
+    let out;
+    try {
+      out = await smartCleanup(sample);
+    } catch (err) {
+      // the model name is the fragile part — ask the key what it really has, then retry once
+      if (/model/i.test(err.message)) {
+        $("smartStatus").textContent = "Finding a model your key can use…";
+        const { chosen } = await discoverModels({ quiet: true });
+        if (!chosen) throw new Error("Your key has no usable chat model");
+        out = await smartCleanup(sample);
+      } else throw err;
+    }
+    $("smartStatus").textContent = `Working ✓ (${smartModel()})  →  ${out.slice(0, 80)}`;
     toast("Smart cleanup is live");
   } catch (err) {
     const msg = err.name === "AbortError" ? "Timed out — check your connection" : err.message;

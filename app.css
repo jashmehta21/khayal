@@ -708,6 +708,12 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .switch:checked::after { transform: translateX(19px); }
 
 /* smart cleanup config */
+.field-select {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238c8880' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 13px center;
+  padding-right: 36px !important;
+}
 #apiKey, #apiModel {
   width: 100%; border: 1px solid var(--line); background: var(--card-2);
   border-radius: 13px; padding: 12px 13px; margin-top: 5px;
