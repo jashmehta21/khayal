@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Khayal</title>
+<meta name="description" content="Catch every khayal. Private, offline, yours.">
+<meta name="theme-color" content="#0c0714">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Khayal">
+<link rel="preload" href="fonts/outfit.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ CAPTURE ============ -->
+  <section class="screen active" id="screen-capture">
+    <header class="screen-head brand-head">
+      <h1 class="wordmark">Khayal</h1>
+      <p class="subtitle" id="todayStat">Catch every khayal ✦</p>
+    </header>
+
+    <div class="capture-body">
+      <div class="transcript-wrap">
+        <textarea id="transcript" placeholder="Bolo ya likho — jo bhi mann mein hai…" rows="5"></textarea>
+        <div id="interim" class="interim" aria-live="polite"></div>
+      </div>
+
+      <div class="seg-control" role="tablist" aria-label="Voice language">
+        <button class="seg lang-chip" data-lang="en-IN" id="langEn" role="tab">English</button>
+        <button class="seg lang-chip" data-lang="hi-IN" id="langHi" role="tab">Hindi</button>
+      </div>
+      <p class="lang-note" id="langNote" hidden>Hindi bolo — English letters mein likhega ✓</p>
+
+      <div class="mic-zone">
+        <button id="micBtn" class="mic-btn" aria-label="Start recording">
+          <span class="mic-ring r1"></span>
+          <span class="mic-ring r2"></span>
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+        </button>
+        <div class="wave" id="wave" hidden><i></i><i></i><i></i><i></i><i></i></div>
+        <div id="micHint" class="mic-hint">Tap to speak</div>
+      </div>
+
+      <div class="capture-actions" id="captureActions" hidden>
+        <button id="discardBtn" class="btn ghost">Discard</button>
+        <button id="saveBtn" class="btn primary">Save khayal ✦</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THOUGHTS ============ -->
+  <section class="screen" id="screen-thoughts">
+    <header class="screen-head">
+      <h1>Khayals</h1>
+      <p class="subtitle" id="thoughtsStat"></p>
+    </header>
+    <div class="list-controls">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+        <input type="search" id="searchBox" placeholder="Search your mind…" autocomplete="off">
+      </div>
+      <div class="filter-row">
+        <button class="chip filter-chip active" data-filter="all">All</button>
+        <button class="chip filter-chip" data-filter="core">✦ Core</button>
+        <button class="chip filter-chip" data-filter="high">★ High</button>
+        <button class="chip filter-chip" data-filter="fading">Fading</button>
+      </div>
+    </div>
+    <div id="thoughtList" class="thought-list"></div>
+  </section>
+
+  <!-- ============ REVIEW ============ -->
+  <section class="screen" id="screen-review">
+    <header class="screen-head">
+      <h1>Review</h1>
+      <p class="subtitle">Keep what matters. Let the rest go.</p>
+    </header>
+    <div id="fadingBanner" class="fading-banner" hidden></div>
+    <div id="reviewArea"></div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="screen" id="screen-settings">
+    <header class="screen-head">
+      <h1>Settings</h1>
+      <p class="subtitle" id="statsLine"></p>
+    </header>
+
+    <div class="settings-group">
+      <h2>Backup</h2>
+      <p class="settings-note">Your khayals live only on this device. Export a backup file regularly, and import it on your other devices to move them across.</p>
+      <div class="settings-row">
+        <button id="exportBtn" class="btn secondary">Export backup</button>
+        <button id="importBtn" class="btn secondary">Import backup</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h2>Trash</h2>
+      <p class="settings-note">Purged khayals rest here for 30 days, then disappear forever.</p>
+      <div id="trashList" class="trash-list"></div>
+      <div class="settings-row">
+        <button id="emptyTrashBtn" class="btn danger" hidden>Empty trash now</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h2>Install on this device</h2>
+      <div id="installHelp" class="settings-note"></div>
+      <button id="installBtn" class="btn secondary" hidden>Install Khayal</button>
+    </div>
+
+    <div class="settings-group about">
+      <h2>About</h2>
+      <p class="settings-note">Khayal keeps your thoughts private — nothing ever leaves this device. Voice uses your device's built-in speech engine; Hindi speech is written in English letters, automatically.<br><br>Tiers: <b>✦ Core</b> — the khayals that define you. <b>★ High</b> — worth keeping. <b>Regular</b> — reviewed over time, purged when they fade.</p>
+    </div>
+  </section>
+</div>
+
+<!-- ============ TAB BAR ============ -->
+<nav class="tabbar">
+  <button class="tab active" data-screen="capture" aria-label="Capture">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+    <span>Capture</span>
+  </button>
+  <button class="tab" data-screen="thoughts" aria-label="Khayals">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+    <span>Khayals</span>
+  </button>
+  <button class="tab" data-screen="review" aria-label="Review">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+    <span>Review</span>
+    <span class="badge" id="reviewBadge" hidden></span>
+  </button>
+  <button class="tab" data-screen="settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    <span>Settings</span>
+  </button>
+</nav>
+
+<!-- ============ DETAIL SHEET ============ -->
+<div class="sheet-backdrop" id="sheetBackdrop" hidden>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-handle"></div>
+    <textarea id="detailText" rows="6"></textarea>
+    <div class="tier-select">
+      <button class="chip tier-chip" data-tier="0">Regular</button>
+      <button class="chip tier-chip" data-tier="1">★ High</button>
+      <button class="chip tier-chip" data-tier="2">✦ Core</button>
+    </div>
+    <p class="detail-meta" id="detailMeta"></p>
+    <div class="sheet-actions">
+      <button id="detailPurge" class="btn danger">Purge</button>
+      <button id="detailSave" class="btn primary">Save</button>
+    </div>
+    <button id="detailClose" class="btn ghost close-btn">Close</button>
+  </div>
+</div>
+
+<!-- ============ ONBOARDING ============ -->
+<div class="onboard" id="onboard" hidden>
+  <div class="onboard-card">
+    <div class="onboard-glyph">✦</div>
+    <h2 class="wordmark">Khayal</h2>
+    <p class="onboard-tag">Catch every khayal — before it fades.</p>
+    <div class="onboard-row"><span class="ob-ico">🎙</span><p><b>Bolo.</b> English ya Hindi — Hindi speech is written in English letters, ready to save.</p></div>
+    <div class="onboard-row"><span class="ob-ico">✦</span><p><b>Keep the best.</b> Promote khayals to ★ High and ✦ Core. Review resurfaces old ones; fading ones get flagged for purging.</p></div>
+    <div class="onboard-row"><span class="ob-ico">🔒</span><p><b>Private.</b> Everything stays on this device. Nothing is uploaded, ever.</p></div>
+    <button id="onboardDone" class="btn primary">Shuru karein ✦</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
