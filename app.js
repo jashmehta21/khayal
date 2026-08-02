@@ -141,6 +141,89 @@ function polish(text) {
   return out;
 }
 
+/* ================= auto titles =================
+   Compresses a khayal into a short headline, locally and instantly: drop the
+   hedging run-up people speak with, keep the first real clause, trim it to a
+   natural length. No AI, no network. */
+const MAX_TITLE = 52;
+
+const TITLE_OPENERS = [
+  /^(?:so|and|but|okay|ok|well|now|see|look|actually|basically|honestly|anyway)\b[\s,]*/i,
+  /^(?:i(?:'ve| have)? (?:was |been )?(?:just )?(?:thinking|wondering|realising|realizing|feeling)\b(?: that| like| if)?)\s*/i,
+  /^(?:i (?:think|feel|believe|guess|reckon)\b(?: that| like)?)\s*/i,
+  /^(?:what if|imagine(?: if)?|maybe|perhaps|suppose)\b\s*/i,
+  /^(?:mujhe lagta hai(?: ki)?|mera manna hai(?: ki)?|aisa lagta hai(?: ki)?|mujhe lagta(?: ki)?)\s*/i,
+  /^(?:note to self|reminder|idea|thought)\b[\s:,-]*/i,
+  /^(?:that|the fact that)\s+(?=\w)/i,
+];
+
+// words a title shouldn't end on
+const TRAIL_TRIM = new Set([
+  "a", "an", "the", "and", "or", "but", "so", "to", "of", "in", "on", "at", "for",
+  "with", "from", "by", "as", "is", "was", "are", "were", "be", "that", "this",
+  "it", "its", "my", "our", "your", "i", "we", "you", "he", "she", "they",
+  "ki", "ka", "ke", "kya", "hai", "hain", "mein", "se", "ko", "aur", "par", "bhi", "toh",
+]);
+
+function generateTitle(text) {
+  let s = String(text || "").trim().replace(/\s+/g, " ");
+  if (!s) return "";
+
+  // peel off hedges repeatedly: "So I was thinking that maybe …" → "…"
+  let prev;
+  do {
+    prev = s;
+    for (const re of TITLE_OPENERS) s = s.replace(re, "");
+    s = s.replace(/^[\s,;:.\-—–]+/, "").trim();
+  } while (s !== prev && s);
+  if (!s) s = String(text).trim().replace(/\s+/g, " ");
+
+  // first sentence
+  const end = s.search(/[.!?…\n]/);
+  let t = end > 0 ? s.slice(0, end) : s;
+
+  // a first sentence that already reads as a title is kept whole
+  const fits = (str) => str.length <= MAX_TITLE && str.split(/\s+/).filter(Boolean).length <= 10;
+  let truncated = false;
+
+  if (!fits(t)) {
+    // cut at the first natural break rather than mid-thought
+    const br = t.search(/\s[—–-]\s|[,;:]\s/);
+    if (br > 14 && br <= MAX_TITLE + 12) { t = t.slice(0, br); truncated = true; }
+  }
+  if (!fits(t)) {
+    const cut = t.slice(0, MAX_TITLE + 1);
+    const sp = cut.lastIndexOf(" ");
+    t = sp > 14 ? cut.slice(0, sp) : cut;
+    truncated = true;
+  }
+  let words = t.split(/\s+/).filter(Boolean);
+  if (words.length > 10) { words = words.slice(0, 10); truncated = true; }
+  // only tidy a dangling connector when something was actually cut off
+  if (truncated) {
+    while (words.length > 2 && TRAIL_TRIM.has(words[words.length - 1].toLowerCase().replace(/[^a-z']/g, ""))) {
+      words.pop();
+    }
+  }
+  t = words.join(" ").replace(/[\s,;:.\-—–]+$/, "").trim();
+
+  if (t.length < 3) t = s.slice(0, MAX_TITLE).trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/* body shown under the title — skips the words the title already used */
+function previewFor(th) {
+  const text = String(th.text || "").trim().replace(/\s+/g, " ");
+  const title = String(th.title || "").trim();
+  if (!title) return text;
+  const norm = (x) => x.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+  if (norm(text).startsWith(norm(title))) {
+    const rest = text.split(" ").slice(title.split(" ").length).join(" ");
+    return rest.replace(/^[\s,;:.\-—–]+/, "").trim();
+  }
+  return text;
+}
+
 /* ================= IndexedDB ================= */
 let db;
 function openDB() {
@@ -507,7 +590,8 @@ async function saveCapture() {
     toast("✓ To-do added");
   } else {
     const t = {
-      id: uid(), text, tier: 0, createdAt: now(), updatedAt: now(),
+      id: uid(), text, title: generateTitle(text), titleEdited: false,
+      tier: 0, createdAt: now(), updatedAt: now(),
       lastReviewedAt: null, reviewCount: 0, snoozedUntil: null, lang: settings.lang || "en-IN",
     };
     thoughts.push(t);
@@ -898,7 +982,7 @@ function renderNotifState() {
 /* ================= search ================= */
 function searchTokens() { return searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean); }
 function matchesSearch(t, tokens) {
-  const hay = t.text.toLowerCase();
+  const hay = (t.text + " " + (t.title || "")).toLowerCase();
   return tokens.every((tok) => hay.includes(tok));
 }
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -952,7 +1036,8 @@ function dayGroup(ts) {
   return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
 }
 function thoughtCardHTML(t, tokens = []) {
-  const { title, rest } = splitPreview(t.text);
+  const title = t.title || generateTitle(t.text);
+  const rest = previewFor({ ...t, title });
   return `<div class="thought-card tier-${t.tier}${isFading(t) ? " fading" : ""}" data-id="${t.id}">
     <div class="thought-title">${highlightHTML(title, tokens)}</div>
     ${rest ? `<div class="thought-preview">${highlightHTML(rest, tokens)}</div>` : ""}
@@ -1169,6 +1254,7 @@ function openDetail(id) {
   if (!t) return;
   detailId = id;
   detailTier = t.tier;
+  $("detailTitle").value = t.title || generateTitle(t.text);
   $("detailText").value = t.text;
   $("detailMeta").textContent = `Created ${relTime(t.createdAt)} · reviewed ${t.reviewCount || 0}×`;
   updateTierChips();
@@ -1195,11 +1281,33 @@ $("detailCopy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("detailText").value); toast("Copied"); }
   catch { toast("Couldn't copy"); }
 });
+/* regenerate on demand, and hand the title back to the generator if it's cleared */
+$("retitleBtn").addEventListener("click", () => {
+  const fresh = generateTitle($("detailText").value);
+  $("detailTitle").value = fresh;
+  buzz(10);
+  toast(fresh ? "Title regenerated" : "Nothing to title");
+});
+
 $("detailSave").addEventListener("click", async () => {
   const t = thoughts.find((x) => x.id === detailId);
   if (!t) return;
   const newText = $("detailText").value.trim();
   if (!newText) { toast("Khayal can't be empty"); return; }
+  const typedTitle = $("detailTitle").value.trim();
+  const autoForOld = generateTitle(t.text);
+
+  if (!typedTitle) {
+    // cleared the field — go back to an automatic title
+    t.title = generateTitle(newText);
+    t.titleEdited = false;
+  } else if (typedTitle !== (t.title || autoForOld)) {
+    t.title = typedTitle;           // they wrote their own
+    t.titleEdited = true;
+  } else if (!t.titleEdited && newText !== t.text) {
+    t.title = generateTitle(newText); // auto title follows the edited text
+  }
+
   t.text = newText; t.tier = detailTier; t.updatedAt = now();
   await dbPut("thoughts", t);
   closeDetail(); refreshThoughts(); toast("Updated");
@@ -1249,6 +1357,7 @@ function renderReviewCard() {
     <div class="review-progress">${reviewIndex + 1} of ${reviewQueue.length}</div>
     <div class="review-stack">
       <div class="review-card">
+        <div class="review-title">${esc(t.title || generateTitle(t.text))}</div>
         <div class="thought-title">${esc(t.text)}</div>
         <div class="thought-meta">${tierBadge(t)}<span>${relTime(t.createdAt)}</span>${isFading(t) ? '<span class="fade-tag">fading</span>' : ""}</div>
       </div>
@@ -1357,6 +1466,7 @@ $("importFile").addEventListener("change", async (e) => {
     if ((data.app !== "khayal" && data.app !== "sparks") || !Array.isArray(data.thoughts)) throw new Error("bad");
     let added = 0, updated = 0;
     for (const inc of data.thoughts) {
+      if (!inc.title) inc.title = generateTitle(inc.text); // older backups
       const ex = thoughts.find((t) => t.id === inc.id);
       if (!ex) { thoughts.push(inc); await dbPut("thoughts", inc); added++; }
       else if ((inc.updatedAt || 0) > (ex.updatedAt || 0)) { Object.assign(ex, inc); await dbPut("thoughts", ex); updated++; }
@@ -1415,6 +1525,16 @@ document.addEventListener("visibilitychange", () => {
   updateBadges();
 });
 
+/* every khayal saved before titles existed gets one, once */
+async function backfillTitles() {
+  const missing = thoughts.filter((t) => !t.title);
+  for (const t of missing) {
+    t.title = generateTitle(t.text);
+    t.titleEdited = false;
+    await dbPut("thoughts", t);
+  }
+}
+
 async function cleanOldTrash() {
   const cutoff = now() - TRASH_DAYS * DAY;
   for (const t of trash.filter((x) => x.purgedAt < cutoff)) await dbDelete("trash", t.id);
@@ -1428,6 +1548,7 @@ async function cleanOldTrash() {
   trash = await dbGetAll("trash");
   todos = await dbGetAll("todos");
   await cleanOldTrash();
+  await backfillTitles();
 
   document.body.classList.toggle("no-motion", settings.motion === false);
   setLang(settings.lang || "en-IN");

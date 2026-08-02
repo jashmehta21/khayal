@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=8">
+<link rel="stylesheet" href="app.css?v=9">
 </head>
 <body>
 
@@ -292,7 +292,12 @@
 <div class="sheet-backdrop" id="sheetBackdrop" hidden>
   <div class="sheet" role="dialog" aria-modal="true">
     <div class="sheet-handle"></div>
-    <div class="micro-label">KHAYAL</div>
+    <div class="label-row">
+      <span class="micro-label">TITLE</span>
+      <button id="retitleBtn" class="chip chip-accent tiny-chip">↻ Regenerate</button>
+    </div>
+    <input type="text" id="detailTitle" placeholder="Untitled khayal" autocomplete="off">
+    <div class="micro-label mt">KHAYAL</div>
     <textarea id="detailText" rows="6"></textarea>
     <div class="sheet-tools">
       <button id="detailPolish" class="chip chip-accent">✨ Polish</button>
@@ -355,6 +360,6 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
