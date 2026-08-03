@@ -410,24 +410,49 @@ const MapView = (() => {
     if (!isFinite(cam.z) || cam.z <= 0) cam.z = 1;
     cam.x = -(minX + maxX) / 2;
     cam.y = -(minY + maxY) / 2;
-    nodes.forEach((nd, i) => { nd.seed = i * 0.7; });
+    // give the cloud depth: connected khayals sit at similar depths, so
+    // clusters read as shells rather than a flat sheet
+    nodes.forEach((nd, i) => {
+      nd.seed = i * 0.7;
+      const golden = Math.PI * (3 - Math.sqrt(5));
+      nd.z = Math.cos(i * golden * 1.7) * Math.max(spanX, spanY) * 0.28;
+    });
   }
 
   function build() {
     const edges = buildGraph();
     nodes = thoughts.map((t) => ({
       id: t.id, tier: t.tier, title: t.title || t.text.slice(0, 40),
-      x: 0, y: 0, vx: 0, vy: 0, seed: 0,
+      x: 0, y: 0, z: 0, vx: 0, vy: 0, seed: 0,
     }));
     const ids = new Set(nodes.map((n) => n.id));
     links = edges.filter((e) => ids.has(e.a) && ids.has(e.b));
     layout();
   }
 
-  const toScreen = (nd, drift) => ({
-    x: (nd.x + cam.x) * cam.z + W / 2 + drift.dx,
-    y: (nd.y + cam.y) * cam.z + H / 2 + drift.dy,
-  });
+  /* Nodes live in 3D and are projected with perspective, so the cloud has real
+     depth: it turns slowly on its own, and dragging spins it. */
+  let yaw = 0, pitch = -0.18, autoSpin = true;
+  const FOCAL = 620;
+
+  function project(nd, t) {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const bob = autoSpin ? Math.sin(t * 0.5 + nd.seed) * 3 : 0;
+    let x = nd.x, y = nd.y + bob, z = nd.z;
+    // rotate around Y, then X
+    let x1 = x * cy + z * sy;
+    let z1 = -x * sy + z * cy;
+    let y1 = y * cp - z1 * sp;
+    let z2 = y * sp + z1 * cp;
+    const depth = FOCAL / (FOCAL + z2 + 260);
+    return {
+      x: (x1 + cam.x) * cam.z * depth + W / 2,
+      y: (y1 + cam.y) * cam.z * depth + H / 2,
+      d: depth, z: z2,
+    };
+  }
+  const toScreen = (nd) => project(nd, 0);
 
   function draw(ts) {
     if (!running) return;
@@ -443,38 +468,37 @@ const MapView = (() => {
         else if (e.b === focusId) neighbours.add(e.a);
       }
     }
-    const pos = new Map();
-    for (const nd of nodes) {
-      const drift = still ? { dx: 0, dy: 0 } : {
-        dx: Math.sin(time * 0.35 + nd.seed) * 1.6,
-        dy: Math.cos(time * 0.31 + nd.seed * 1.3) * 1.6,
-      };
-      pos.set(nd.id, toScreen(nd, drift));
-    }
+    if (autoSpin && !still && !drag) yaw += 0.0022;
 
-    // links
+    const pos = new Map();
+    for (const nd of nodes) pos.set(nd.id, project(nd, still ? 0 : time));
+
+    // links, faded by depth
     ctx.lineWidth = 1;
     for (const e of links) {
       const p = pos.get(e.a), q = pos.get(e.b);
       if (!p || !q) continue;
       const lit = focusId && (e.a === focusId || e.b === focusId);
       const dim = focusId && !lit;
+      const depth = (p.d + q.d) / 2;
       ctx.strokeStyle = lit
-        ? `rgba(240,83,55,${0.25 + e.w * 0.5})`
-        : `rgba(20,18,15,${(dim ? 0.03 : 0.05 + e.w * 0.13)})`;
+        ? `rgba(240,83,55,${(0.25 + e.w * 0.5) * depth})`
+        : `rgba(20,18,15,${(dim ? 0.03 : 0.05 + e.w * 0.13) * depth})`;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
       ctx.lineTo(q.x, q.y);
       ctx.stroke();
     }
 
-    // nodes
-    for (const nd of nodes) {
+    // nodes, painted far-to-near so nearer stars sit on top
+    const order = [...nodes].sort((a, b) => pos.get(b.id).z - pos.get(a.id).z);
+    for (const nd of order) {
       const p = pos.get(nd.id);
       const isFocus = nd.id === focusId;
       const near = neighbours.has(nd.id);
       const dim = focusId && !isFocus && !near;
-      const r = (TIER_R[nd.tier] || 3.4) * (isFocus ? 1.9 : 1) * Math.min(Math.max(cam.z, 0.7), 1.5);
+      const r = (TIER_R[nd.tier] || 3.4) * (isFocus ? 1.9 : 1)
+        * Math.min(Math.max(cam.z, 0.7), 1.5) * (0.55 + p.d * 0.75);
       const col = TIER_COLOR[nd.tier] || TIER_COLOR[0];
 
       if (nd.tier === 2 && !dim) {
@@ -484,7 +508,7 @@ const MapView = (() => {
         ctx.fillStyle = glow;
         ctx.beginPath(); ctx.arc(p.x, p.y, r * 4.5, 0, Math.PI * 2); ctx.fill();
       }
-      ctx.globalAlpha = dim ? 0.22 : 1;
+      ctx.globalAlpha = (dim ? 0.22 : 1) * Math.min(1, 0.35 + p.d * 0.8);
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
       if (isFocus) {
@@ -517,7 +541,7 @@ const MapView = (() => {
   function hit(px, py) {
     let best = null, bestD = 22 * 22;
     for (const nd of nodes) {
-      const p = toScreen(nd, { dx: 0, dy: 0 });
+      const p = toScreen(nd);
       const dx = p.x - px, dy = p.y - py;
       const d = dx * dx + dy * dy;
       if (d < bestD) { bestD = d; best = nd; }
@@ -538,36 +562,79 @@ const MapView = (() => {
     showLayer(hud);
   }
 
+  /* One pointer spins the cloud, two pinch to zoom and pan together. Tracking
+     every active pointer is what stops the two-finger glitching. */
+  const active = new Map();
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
   function bindGestures() {
     canvas.addEventListener("pointerdown", (e) => {
-      // capture is a nicety; if the browser refuses it, dragging must still work
       try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-      drag = { x: e.clientX, y: e.clientY, moved: false, sx: e.clientX, sy: e.clientY };
+      active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (active.size === 1) {
+        drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false };
+        pinch = null;
+      } else if (active.size === 2) {
+        const [a, b] = [...active.values()];
+        pinch = { d: dist(a, b), m: mid(a, b), z: cam.z };
+        drag = null;
+      }
     });
+
     canvas.addEventListener("pointermove", (e) => {
+      if (!active.has(e.pointerId)) return;
+      active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (active.size >= 2 && pinch) {
+        const [a, b] = [...active.values()];
+        const d = dist(a, b), m = mid(a, b);
+        if (pinch.d > 0) cam.z = Math.max(0.25, Math.min(5, pinch.z * (d / pinch.d)));
+        cam.x += (m.x - pinch.m.x) / cam.z;
+        cam.y += (m.y - pinch.m.y) / cam.z;
+        pinch.m = m;
+        return;
+      }
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 6) drag.moved = true;
-      cam.x += dx / cam.z; cam.y += dy / cam.z;
+      yaw += dx * 0.006;                                   // spin
+      pitch = Math.max(-1.1, Math.min(1.1, pitch + dy * 0.004));
       drag.x = e.clientX; drag.y = e.clientY;
     });
-    canvas.addEventListener("pointerup", (e) => {
-      if (drag && !drag.moved) {
+
+    const release = (e) => {
+      const wasSingleTap = active.size === 1 && drag && !drag.moved;
+      if (wasSingleTap) {
         const r = canvas.getBoundingClientRect();
         const nd = hit(e.clientX - r.left, e.clientY - r.top);
         focusId = nd ? (focusId === nd.id ? null : nd.id) : null;
         showHud(focusId ? nd : null);
         if (nd) buzz(8);
       }
-      drag = null;
+      active.delete(e.pointerId);
+      if (active.size < 2) pinch = null;
+      if (active.size === 0) drag = null;
+      else if (active.size === 1) {
+        const [p] = [...active.values()];
+        drag = { x: p.x, y: p.y, sx: p.x, sy: p.y, moved: true };
+      }
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", (e) => {
+      active.delete(e.pointerId);
+      if (active.size < 2) pinch = null;
+      if (active.size === 0) drag = null;
     });
-    canvas.addEventListener("pointercancel", () => { drag = null; });
+
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
-      const f = e.deltaY < 0 ? 1.12 : 0.89;
-      cam.z = Math.max(0.25, Math.min(4, cam.z * f));
+      cam.z = Math.max(0.25, Math.min(5, cam.z * (e.deltaY < 0 ? 1.12 : 0.89)));
     }, { passive: false });
   }
+
+  function zoomBy(f) { cam.z = Math.max(0.25, Math.min(5, cam.z * f)); }
+  function resetView() { yaw = 0; pitch = -0.18; focusId = null; showHud(null); layout(); }
 
   let bound = false;
   function start() {
@@ -617,10 +684,11 @@ const MapView = (() => {
     showHud(nd || null);
     return !!nd;
   }
-  const positions = () => nodes.map((n) => ({ id: n.id, ...toScreen(n, { dx: 0, dy: 0 }) }));
+  const positions = () => nodes.map((n) => ({ id: n.id, ...toScreen(n) }));
 
   return { start, stop, rebuild: start, updateStatus, isRunning: () => running,
-    focus, positions, linkCount: () => links.length, nodeCount: () => nodes.length };
+    focus, positions, linkCount: () => links.length, nodeCount: () => nodes.length,
+    zoomBy, resetView, setSpin: (v) => { autoSpin = v; } };
 })();
 
 /* ================= ask (RAG over your own khayals) ================= */

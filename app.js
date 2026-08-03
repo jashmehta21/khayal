@@ -147,20 +147,25 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v20";                      // shown in Settings so we can confirm what's running
+const BUILD = "v21";                      // shown in Settings so we can confirm what's running
 
-const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
+const CLEANUP_PROMPT = `You are a dictation editor. Turn the raw speech below into what the speaker MEANT to write — the way a great human transcriptionist would.
 
-Rules:
-- Keep the original meaning, facts, opinions and first-person voice. Never add ideas, never summarise, never shorten meaningfully, never answer or comment on the content.
-- Remove filler words, stutters, repetitions and false starts.
-- Fix grammar, word errors and mishearings from speech recognition.
-- Add correct punctuation, capitalisation and paragraph breaks.
-- If the speaker mixes Hindi and English, write the Hindi words in English letters (Roman script) the way they sound — never Devanagari, and never translate them into English.
-- If the text is already clean, return it essentially unchanged.
-- Reply with the edited text only: no preamble, no explanation, no quotes, no markdown.
+What to do:
+- Keep their meaning, facts, opinions and first-person voice exactly. Never add ideas, never answer, never comment, never summarise away detail.
+- Delete fillers, stutters and false starts: "um", "uh", "you know", "I mean", "like", "matlab", "yaani", "basically" when it's noise.
+- Honour self-correction. Speech doubles back — keep only the final intent. "I need to call Raj, no wait, I need to call Aman" becomes "I need to call Aman." "Let's meet Tuesday, actually Wednesday" becomes "Let's meet Wednesday."
+- Collapse restarts and accidental repetition: "I think I think that we should, we should go" becomes "I think that we should go."
+- Fix speech-recognition mishearings using context — wrong homophones, mangled names, broken numbers. If something is clearly a proper noun or a brand, spell it sensibly.
+- Punctuate properly: full stops, commas, question marks, apostrophes, capitals. Break into paragraphs where the subject changes. Use a bulleted list only if they were plainly listing things.
+- Numbers, money, dates and times in their normal written form: "thirty two thousand rupees" becomes "₹32,000", "half past nine" becomes "9:30".
+- If Hindi and English are mixed, write the Hindi in English letters (Roman script) as it sounds. Never Devanagari, never translated into English.
+- Keep the length close to what they said. Tighten, don't rewrite their style or make it formal.
+- If it's already clean, return it essentially unchanged.
 
-Dictated text:
+Reply with the edited text only: no preamble, no explanation, no quotes, no markdown fences.
+
+Raw speech:
 `;
 
 function smartKey() { return localStorage.getItem("khayal-key") || ""; }
@@ -281,7 +286,11 @@ let mediaRec = null, audioChunks = [], micStream = null;
 async function startAudioCapture() {
   if (!cloudSttReady()) return false;
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (micStream && micStream.getTracks().some((t) => t.readyState === "live")) {
+      micStream.getTracks().forEach((t) => { t.enabled = true; });   // reuse, no new prompt
+    } else {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
     const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
       .find((m) => window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
     mediaRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
@@ -291,10 +300,18 @@ async function startAudioCapture() {
     return true;
   } catch (_) { releaseMic(); return false; }
 }
-function releaseMic() {
-  if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+/* Keep the granted stream for the life of the session instead of asking for
+   the microphone on every single recording, which is what made the permission
+   prompt reappear constantly. Tracks are disabled between takes so the OS
+   recording indicator goes out, and fully released when the app is hidden. */
+function releaseMic({ keep = true } = {}) {
   mediaRec = null;
+  if (!micStream) return;
+  if (keep) { micStream.getTracks().forEach((t) => { t.enabled = false; }); return; }
+  micStream.getTracks().forEach((t) => t.stop());
+  micStream = null;
 }
+function dropMic() { releaseMic({ keep: false }); }
 function stopAudioCapture() {
   return new Promise((resolve) => {
     if (!mediaRec || mediaRec.state === "inactive") { releaseMic(); return resolve(null); }
@@ -755,15 +772,13 @@ function stopRecording({ cleanup = false } = {}) {
    it up. Any failure quietly keeps whatever the phone already heard. */
 async function finishCloudDictation(cleanup) {
   const ta = $("transcript");
-  $("micHint").textContent = "Transcribing…";
-  cleaning = true;
-  $("polishBtn").disabled = true;
+  setWorking(true, "Transcribing what you said…");
   try {
     const blob = await stopAudioCapture();
     if (!blob || blob.size < 1200) throw new Error("Nothing recorded");
     let text = transliterate(await transcribeAudio(blob));
     if (cleanup && smartEnabled()) {
-      $("micHint").textContent = "Tidying up your words…";
+      $("workingNote").textContent = "Tidying up your words…";
       try { text = await smartCleanup(text); } catch (_) { text = polish(text); }
     } else {
       text = polish(text);
@@ -779,9 +794,7 @@ async function finishCloudDictation(cleanup) {
     if (cleanup && smartEnabled() && ta.value.trim()) { await runCleanup({ silent: true }); }
     toast(msg + " — kept what your phone heard");
   } finally {
-    cleaning = false;
-    $("polishBtn").disabled = false;
-    if (!recording) $("micHint").textContent = "Tap to speak";
+    setWorking(false);
   }
 }
 function updateMicUI() {
@@ -808,27 +821,31 @@ $("transcript").addEventListener("keydown", (e) => {
 let prePolish = null;
 let cleaning = false;
 
+/* an unmistakable busy state, so a khayal isn't saved mid-rewrite */
+function setWorking(on, label) {
+  cleaning = on;
+  const card = document.querySelector(".compose-card");
+  if (card) card.classList.toggle("working", on);
+  $("workingBox").hidden = !on;
+  if (label) $("workingNote").textContent = label;
+  $("polishBtn").disabled = on;
+  $("saveBtn").disabled = on;
+  $("saveBtn").style.opacity = on ? "0.5" : "";
+  $("transcript").readOnly = on;
+  if (!on && !recording) $("micHint").textContent = "Tap to speak";
+}
+
 async function runCleanup({ silent = false } = {}) {
   const ta = $("transcript");
   const before = ta.value.trim();
   if (!before || cleaning) return;
 
   const smart = smartEnabled();
-  if (smart) {
-    cleaning = true;
-    $("polishBtn").textContent = "✨ Polishing…";
-    $("polishBtn").disabled = true;
-    $("micHint").textContent = "Tidying up your words…";
-  }
+  if (smart) setWorking(true, "Polishing your words…");
 
   const { text: after, smart: usedSmart, error } = await bestCleanup(before);
 
-  if (smart) {
-    cleaning = false;
-    $("polishBtn").textContent = "✨ Polish";
-    $("polishBtn").disabled = false;
-    if (!recording) $("micHint").textContent = "Tap to speak";
-  }
+  if (smart) setWorking(false);
 
   if (after === before) {
     if (!silent) toast(error ? error : "Already clean");
@@ -1737,13 +1754,19 @@ function refreshThoughts() {
   if (view === "insights") renderInsights();
   else if (view === "map") {
     $("mapCta").hidden = !!smartKey();
-    MapView.start();
-    // fill in any missing meaning vectors the moment the map is opened
-    if (smartKey() && thoughts.some((t) => !t.vec)) {
-      $("mapStatus").textContent = "Understanding your khayals…";
-      embedMissing((d, tt) => { $("mapStatus").textContent = `Understanding your khayals… ${d}/${tt}`; })
-        .then(({ done }) => { if (done) MapView.rebuild(); else MapView.updateStatus(); })
-        .catch((e) => { $("mapStatus").textContent = e.message; });
+    // the map keeps itself current: anything new is understood on arrival,
+    // behind a loading veil, then the constellation rebuilds itself
+    const pending = smartKey() ? thoughts.filter((t) => !t.vec).length : 0;
+    if (pending) {
+      $("mapLoading").hidden = false;
+      $("mapLoadingText").textContent = `Understanding ${pending} khayal${pending > 1 ? "s" : ""}…`;
+      MapView.start();
+      embedMissing((d, tt) => { $("mapLoadingText").textContent = `Understanding your khayals… ${d}/${tt}`; })
+        .then(({ done }) => { $("mapLoading").hidden = true; if (done) MapView.rebuild(); else MapView.updateStatus(); })
+        .catch((e) => { $("mapLoading").hidden = true; $("mapStatus").textContent = e.message; });
+    } else {
+      $("mapLoading").hidden = true;
+      MapView.start();
     }
   }
   else { renderDateBar(); renderList(); }
@@ -2241,7 +2264,30 @@ $("motionToggle").addEventListener("change", (e) => {
 
 /* ---- backup ---- */
 $("exportBtn").addEventListener("click", () => {
-  const data = { app: "khayal", version: 2, exportedAt: new Date().toISOString(), thoughts, trash, todos };
+  /* A complete portrait of the app: every khayal with its title, tier, review
+     history and meaning vector, every to-do, the trash, and your preferences —
+     enough to rebuild this exactly somewhere else. The API key is deliberately
+     left out so a backup file is never a credential. */
+  const plain = (t) => ({ ...t, vec: t.vec ? Array.from(t.vec) : undefined });
+  const data = {
+    app: "khayal",
+    version: 3,
+    build: BUILD,
+    exportedAt: new Date().toISOString(),
+    counts: { thoughts: thoughts.length, todos: todos.length, trash: trash.length },
+    settings: { ...settings },
+    preferences: {
+      provider: smartProvider(),
+      model: smartModel(),
+      embedModel: embedModel(),
+      sttModel: sttModel(),
+      apiBase: smartProvider() === "custom" ? localStorage.getItem("khayal-base") : undefined,
+      note: "API key intentionally not exported — re-enter it after importing.",
+    },
+    thoughts: thoughts.map(plain),
+    trash: trash.map(plain),
+    todos,
+  };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -2259,8 +2305,18 @@ $("importFile").addEventListener("change", async (e) => {
     const data = JSON.parse(await file.text());
     if ((data.app !== "khayal" && data.app !== "sparks") || !Array.isArray(data.thoughts)) throw new Error("bad");
     let added = 0, updated = 0;
+    if (data.settings) { settings = { ...settings, ...data.settings }; saveSettings(); }
+    if (data.preferences) {
+      const p = data.preferences;
+      if (p.provider) localStorage.setItem("khayal-provider", p.provider);
+      if (p.model) localStorage.setItem("khayal-model", p.model);
+      if (p.embedModel) localStorage.setItem("khayal-embed-model", p.embedModel);
+      if (p.sttModel) localStorage.setItem("khayal-stt-model", p.sttModel);
+      if (p.apiBase) localStorage.setItem("khayal-base", p.apiBase);
+    }
     for (const inc of data.thoughts) {
       if (!inc.title) inc.title = generateTitle(inc.text); // older backups
+      if (Array.isArray(inc.vec)) inc.vec = Float32Array.from(inc.vec);
       const ex = thoughts.find((t) => t.id === inc.id);
       if (!ex) { thoughts.push(inc); await dbPut("thoughts", inc); added++; }
       else if ((inc.updatedAt || 0) > (ex.updatedAt || 0)) { Object.assign(ex, inc); await dbPut("thoughts", ex); updated++; }
@@ -2304,7 +2360,27 @@ $("installBtn").addEventListener("click", async () => {
 });
 
 /* ================= map controls ================= */
-$("hudClose").addEventListener("click", () => { $("mapHud").hidden = true; });
+$("hudClose").addEventListener("click", () => { hideLayer($("mapHud")); });
+$("mapZoomIn").addEventListener("click", () => { buzz(6); MapView.zoomBy(1.25); });
+$("mapZoomOut").addEventListener("click", () => { buzz(6); MapView.zoomBy(0.8); });
+$("mapReset").addEventListener("click", () => { buzz(8); MapView.resetView(); });
+
+/* the canvas eats horizontal drags, so the screen edges stay reserved for
+   swiping between Memories, Map and Insights */
+document.querySelectorAll(".swipe-edge").forEach((edge) => {
+  let sx = 0, sy = 0;
+  edge.addEventListener("touchstart", (e) => {
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+  }, { passive: true });
+  edge.addEventListener("touchend", (e) => {
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy)) return;
+    const i = VIEW_ORDER.indexOf(settings.view);
+    const next = VIEW_ORDER[i + (dx < 0 ? 1 : -1)];
+    if (next) gotoView(next);
+  }, { passive: true });
+});
 $("ctaSettings").addEventListener("click", () => {
   showScreen("settings");
   setTimeout(() => $("smartToggle").scrollIntoView({ block: "center", behavior: "smooth" }), 200);
@@ -2409,7 +2485,8 @@ $("onboardDone").addEventListener("click", () => {
 /* ================= lifecycle ================= */
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") {
-    MapView.stop(); // don't burn battery while backgrounded
+    MapView.stop();  // don't burn battery while backgrounded
+    if (!recording) dropMic();   // fully hand the microphone back
     return;
   }
   if ($("screen-thoughts").classList.contains("active") && settings.view === "map") MapView.start();

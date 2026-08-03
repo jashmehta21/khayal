@@ -21,8 +21,8 @@
   --green: #2f9e6b;
   --green-soft: #e4f4ec;
   /* second tier colour — warm ochre, clearly distinct from the coral of Core */
-  --high: #b07d16;
-  --high-soft: #f9efd9;
+  --high: #2f6fe0;
+  --high-soft: #e7eefc;
 
   --r-card: 24px;
   --r-inner: 16px;
@@ -219,8 +219,8 @@ h3 { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.02em; }
 }
 
 .due-detail { display: flex; gap: 10px; margin-top: 12px; }
-.field { flex: 1; display: flex; flex-direction: column; gap: 5px; }
-.field input {
+.field { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.field input { appearance: none; -webkit-appearance: none; max-width: 100%;
   border: 1px solid var(--line); background: var(--card-2); border-radius: 13px;
   padding: 11px 12px; font-family: var(--font); font-size: 0.9rem; font-weight: 600;
   color: var(--ink); outline: none; width: 100%;
@@ -929,3 +929,55 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 .map-hud.open { opacity: 1; transform: none; }
 .toast { transform: translate(-50%, 14px); }
 .toast.open { opacity: 1; transform: translate(-50%, 0); }
+/* the sheet's actions stay put instead of drifting below a long list of
+   connected khayals */
+.sheet-actions-sticky {
+  position: sticky; bottom: 0; z-index: 2;
+  background: linear-gradient(to bottom, transparent, var(--bg) 22%);
+  padding-top: 14px; margin-top: 2px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.related-list { max-height: 216px; overflow-y: auto; }
+
+/* the compose card makes it obvious the text is being rewritten */
+.compose-card.working #transcript { opacity: 0.45; }
+.working-bar {
+  height: 3px; border-radius: 2px; margin-top: 8px; overflow: hidden;
+  background: var(--line); position: relative;
+}
+.working-bar i {
+  position: absolute; inset: 0; width: 40%; border-radius: 2px;
+  background: var(--accent); animation: sweep 1.1s ease-in-out infinite;
+}
+@keyframes sweep { 0% { left: -42%; } 100% { left: 102%; } }
+.working-note { color: var(--accent); font-size: 0.8rem; font-weight: 700; margin-top: 8px; }
+
+.speak-hint { color: var(--muted); font-size: 0.78rem; font-weight: 500; margin-top: 6px; }
+
+/* map loading + controls */
+.map-loading {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 12px; background: rgba(255,255,255,0.82);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  font-family: var(--font); font-size: 0.86rem; font-weight: 700; color: var(--muted);
+}
+.spinner {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.map-tools {
+  position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px;
+}
+.map-tools button {
+  width: 34px; height: 34px; border-radius: 12px; border: none;
+  background: rgba(255,255,255,0.92); color: var(--ink); cursor: pointer;
+  font-family: var(--font); font-size: 0.95rem; font-weight: 800;
+  box-shadow: 0 2px 8px rgba(20,18,15,0.12);
+}
+.map-tools button:active { transform: scale(0.9); }
+.swipe-edge {
+  position: absolute; top: 0; bottom: 0; width: 26px; z-index: 3;
+}
+.swipe-edge.left { left: 0; } .swipe-edge.right { right: 0; }

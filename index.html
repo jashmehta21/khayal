@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=24">
+<link rel="stylesheet" href="app.css?v=25">
 </head>
 <body>
 
@@ -40,6 +40,11 @@
       <div class="transcript-wrap">
         <textarea id="transcript" placeholder="Bolo ya likho — jo bhi mann mein hai…" rows="4"></textarea>
         <div id="interim" class="interim" aria-live="polite"></div>
+      </div>
+      <p class="speak-hint" id="speakHint">Speak any language — Hindi comes out in English letters.</p>
+      <div id="workingBox" hidden>
+        <div class="working-bar"><i></i></div>
+        <p class="working-note" id="workingNote">Polishing your words…</p>
       </div>
       <button id="polishBtn" class="chip chip-accent" hidden>✨ Polish</button>
 
@@ -183,6 +188,14 @@
       </div>
       <div class="map-wrap">
         <canvas id="mapCanvas"></canvas>
+        <span class="swipe-edge left"></span>
+        <span class="swipe-edge right"></span>
+        <div class="map-tools">
+          <button id="mapZoomIn" aria-label="Zoom in">＋</button>
+          <button id="mapZoomOut" aria-label="Zoom out">－</button>
+          <button id="mapReset" aria-label="Reset view">⌖</button>
+        </div>
+        <div class="map-loading" id="mapLoading" hidden><span class="spinner"></span><span id="mapLoadingText">Building your constellation…</span></div>
         <div class="map-empty" id="mapEmpty" hidden></div>
         <div class="map-hud" id="mapHud" hidden>
           <div class="hud-title" id="hudTitle"></div>
@@ -199,7 +212,7 @@
           <span><i class="dot-high"></i>High</span>
           <span><i class="dot-reg"></i>Regular</span>
         </div>
-        <button id="mapRelink" class="chip tiny-chip">↻ Rebuild links</button>
+        <button id="mapRelink" class="chip tiny-chip">↻ Refresh</button>
       </div>
       <p class="note tiny" id="mapStatus"></p>
     </div>
@@ -433,11 +446,13 @@
       <div id="relatedList" class="related-list"></div>
     </div>
     <p class="detail-meta" id="detailMeta"></p>
-    <div class="btn-row">
-      <button id="detailPurge" class="btn danger">Purge</button>
-      <button id="detailSave" class="btn dark grow">Save</button>
+    <div class="sheet-actions-sticky">
+      <div class="btn-row">
+        <button id="detailPurge" class="btn danger">Purge</button>
+        <button id="detailSave" class="btn dark grow">Save</button>
+      </div>
+      <button id="detailClose" class="btn ghost full">Close</button>
     </div>
-    <button id="detailClose" class="btn ghost full">Close</button>
   </div>
 </div>
 
@@ -507,7 +522,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="mind.js?v=7"></script>
-<script src="app.js?v=20"></script>
+<script src="mind.js?v=8"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>
