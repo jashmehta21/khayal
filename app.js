@@ -147,7 +147,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v22";                      // shown in Settings so we can confirm what's running
+const BUILD = "v23";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a dictation editor. Turn the raw speech below into what the speaker MEANT to write — the way a great human transcriptionist would.
 
@@ -534,7 +534,7 @@ function esc(s) {
 }
 function tierBadge(t) {
   if (t.tier === 2) return '<span class="tier-badge t2">CORE</span>';
-  if (t.tier === 1) return '<span class="tier-badge t1">HIGH</span>';
+  if (t.tier === 1) return '<span class="tier-badge t1">BRIGHT</span>';
   return "";
 }
 function startOfDay(date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }
@@ -1076,43 +1076,89 @@ function todoItemHTML(t) {
   </div></div>`;
 }
 
-/* Trailing swipe deletes, leading swipe completes — the iOS convention. Tapping
-   the row still opens the sheet, so nothing is gesture-only. */
+/* Trailing swipe deletes, leading swipe completes — the iOS convention.
+   The row tracks your finger with resistance past the action point, the label
+   behind it names what will happen, and a tick of haptic fires the moment you
+   cross the threshold, so you always know where you are. Tapping still opens
+   the sheet, so nothing here is gesture-only. */
+const SWIPE_ACTION = 78;   // travel at which the action arms
 function bindSwipe(row) {
   const card = row.querySelector(".todo-item");
-  let x0 = 0, dx = 0, active = false;
-  const THRESH = 92;
-  row.addEventListener("touchstart", (e) => {
-    if (e.touches.length !== 1) return;
-    x0 = e.touches[0].clientX; dx = 0; active = true;
-    row.classList.add("swiping");
-  }, { passive: true });
-  row.addEventListener("touchmove", (e) => {
-    if (!active) return;
-    dx = e.touches[0].clientX - x0;
-    card.style.transform = `translateX(${Math.max(-150, Math.min(150, dx))}px)`;
-  }, { passive: true });
-  row.addEventListener("touchend", async () => {
-    if (!active) return;
-    active = false;
-    row.classList.remove("swiping");
+  const back = row.querySelector(".swipe-back");
+  const leftLabel = back.children[0], rightLabel = back.children[1];
+  let x0 = 0, y0 = 0, dx = 0, id = null, axis = null, armed = 0;
+
+  const paint = () => {
+    // resistance: the row keeps moving but gives less the further you pull
+    const eased = Math.sign(dx) * Math.min(Math.abs(dx), SWIPE_ACTION + Math.pow(Math.max(0, Math.abs(dx) - SWIPE_ACTION), 0.62) * 3);
+    card.style.transform = `translateX(${eased}px)`;
+    const live = Math.abs(dx) >= SWIPE_ACTION;
+    const dir = dx > 0 ? 1 : -1;
+    row.classList.toggle("armed", live);
+    back.style.opacity = String(Math.min(1, Math.abs(dx) / 46));
+    leftLabel.style.opacity = dir > 0 ? "1" : "0.25";
+    rightLabel.style.opacity = dir < 0 ? "1" : "0.25";
+    if (live && armed !== dir) { buzz(9); armed = dir; }
+    else if (!live && armed) armed = 0;
+  };
+  const settle = () => {
+    row.classList.remove("swiping", "armed");
     card.style.transform = "";
-    const t = todos.find((x) => x.id === row.dataset.id);
+    back.style.opacity = "";
+    armed = 0;
+  };
+
+  row.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) { id = null; return; }
+    const t = e.touches[0];
+    id = t.identifier; x0 = t.clientX; y0 = t.clientY; dx = 0; axis = null;
+  }, { passive: true });
+
+  row.addEventListener("touchmove", (e) => {
+    if (id === null) return;
+    const t = [...e.touches].find((x) => x.identifier === id);
     if (!t) return;
-    if (dx <= -THRESH) {
-      const backup = { ...t };
+    const mx = t.clientX - x0, my = t.clientY - y0;
+    if (!axis && Math.abs(mx) + Math.abs(my) > 8) {
+      axis = Math.abs(mx) > Math.abs(my) * 1.15 ? "x" : "y";
+      if (axis === "x") row.classList.add("swiping");
+    }
+    if (axis !== "x") return;
+    dx = mx;
+    paint();
+  }, { passive: true });
+
+  row.addEventListener("touchend", async () => {
+    if (id === null) return;
+    const travelled = axis === "x" ? dx : 0;
+    id = null; axis = null;
+    const t = todos.find((x) => x.id === row.dataset.id);
+
+    if (!t || Math.abs(travelled) < SWIPE_ACTION) { settle(); return; }
+
+    if (travelled <= -SWIPE_ACTION) {
+      // let it fly out before the list reflows
+      card.style.transform = "translateX(-115%)";
+      row.style.opacity = "0.2";
       buzz(18);
+      const backup = { ...t };
       await deleteTodo(t);
-      renderTodos();
-      toast("Deleted — tap to undo", async () => {
-        todos.push(backup); await dbPut("todos", backup);
-        renderTodos(); updateBadges(); scheduleReminders(); toast("Restored");
-      });
-    } else if (dx >= THRESH) {
-      await toggleTodo(t);
-      renderTodos();
+      setTimeout(() => {
+        renderTodos();
+        toast("Deleted — tap to undo", async () => {
+          todos.push(backup); await dbPut("todos", backup);
+          renderTodos(); updateBadges(); scheduleReminders(); toast("Restored");
+        });
+      }, 190);
+    } else {
+      settle();
+      const nowDone = await toggleTodo(t);
+      card.closest(".todo-row").querySelector(".todo-item").classList.toggle("done", nowDone);
+      setTimeout(renderTodos, 420);   // let the tick draw before regrouping
     }
   }, { passive: true });
+
+  row.addEventListener("touchcancel", () => { id = null; axis = null; settle(); }, { passive: true });
 }
 
 function renderTodos() {
@@ -1120,8 +1166,6 @@ function renderTodos() {
   $("todoStat").textContent = todos.length
     ? open ? `${open} to do · ${todos.length - open} done` : "All clear — nothing pending"
     : "Nothing yet";
-  $("clearDoneBtn").hidden = !todos.some((t) => t.done);
-
   updateBadges();
   renderTodoProgress();
 
@@ -1131,13 +1175,19 @@ function renderTodos() {
     list.innerHTML = `<div class="empty-state"><span class="big">✓</span>No to-dos yet.<br>Add one above, or dictate it from Capture.</div>`;
     return;
   }
+  const doneTotal = todos.filter((t) => t.done).length;
   list.innerHTML = sections.map((s) =>
     `<div class="todo-section">
       <div class="section-head">
-        <span class="micro-label">${s.label}</span><span class="rule"></span><span class="count">${s.items.length}</span>
+        <span class="micro-label">${s.label}</span><span class="rule"></span>
+        ${s.key === "done" && doneTotal
+          ? `<button class="chip tiny-chip" id="clearDoneInline">Clear ${doneTotal}</button>`
+          : `<span class="count">${s.items.length}</span>`}
       </div>
       ${s.items.map(todoItemHTML).join("")}
     </div>`).join("");
+  const inlineClear = document.getElementById("clearDoneInline");
+  if (inlineClear) inlineClear.addEventListener("click", clearCompleted);
 
   staggerIn(list, ".todo-item");
   list.querySelectorAll(".todo-row").forEach(bindSwipe);
@@ -1181,16 +1231,18 @@ function renderTodoProgress() {
   $("barFill").style.width = pct + "%";
 }
 
-$("clearDoneBtn").addEventListener("click", async () => {
+/* sits inside the Done section now, where the number it quotes is visible */
+async function clearCompleted() {
   const doneOnes = todos.filter((t) => t.done);
   if (!doneOnes.length) return;
-  if (!confirm(`Remove ${doneOnes.length} completed to-do${doneOnes.length > 1 ? "s" : ""}?`)) return;
+  if (!confirm(`Remove ${doneOnes.length} completed to-do${doneOnes.length > 1 ? "s" : ""} for good?`)) return;
   for (const t of doneOnes) await dbDelete("todos", t.id);
   todos = todos.filter((t) => !t.done);
+  buzz(14);
   renderTodos();
   updateBadges();
   toast("Cleared");
-});
+}
 
 /* ---- todo detail sheet ---- */
 let todoId = null, todoDue = "none";
@@ -1500,7 +1552,7 @@ function renderList() {
     ? `${items.length} result${items.length === 1 ? "" : "s"} for "${searchQuery.trim()}"`
     : selectedDay
     ? `${items.length} on this day`
-    : thoughts.length ? `${thoughts.length} khayals · ${core} core · ${high} high` : "";
+    : thoughts.length ? `${thoughts.length} khayals · ${core} core · ${high} bright` : "";
 
   if (!items.length) {
     list.innerHTML = `<div class="empty-state"><span class="big">${tokens.length ? "🔍" : "✦"}</span>${
@@ -1749,7 +1801,7 @@ function renderTierBreakdown() {
   const total = thoughts.length || 1;
   const rows = [
     { name: "Core", n: thoughts.filter((t) => t.tier === 2).length, color: "var(--accent)" },
-    { name: "High", n: thoughts.filter((t) => t.tier === 1).length, color: "var(--high)" },
+    { name: "Bright", n: thoughts.filter((t) => t.tier === 1).length, color: "var(--high)" },
     { name: "Regular", n: thoughts.filter((t) => t.tier === 0).length, color: "var(--faint)" },
   ];
   $("tierBreakdown").innerHTML = rows.map((r) =>
@@ -1852,27 +1904,56 @@ function gotoView(name) {
 document.querySelectorAll(".view-chip").forEach((c) =>
   c.addEventListener("click", () => gotoView(c.dataset.view)));
 
-/* swipe sideways to move between Memories, Map and Insights */
-(() => {
-  const screen = $("screen-thoughts");
-  let sx = 0, sy = 0, tracking = false;
-  screen.addEventListener("touchstart", (e) => {
-    if (e.touches.length !== 1) { tracking = false; return; }
-    // the map has its own drag, and horizontal scrollers must keep their gesture
-    if (e.target.closest("#mapCanvas, .heat-scroll, .scroll-row, textarea, input")) { tracking = false; return; }
-    sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking = true;
+/* One swipe engine for the whole app. It decides direction once, from the
+   first few pixels of travel, then commits — which is what stops the
+   half-recognised, glitchy feel. It works right to the screen edges, because
+   nothing here fights an iOS system gesture. */
+function onHorizontalSwipe(el, handler) {
+  let sx = 0, sy = 0, id = null, axis = null;
+  const IGNORE = "#mapCanvas, .heat-scroll, .scroll-row, textarea, input, select, .todo-row";
+
+  el.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1 || e.target.closest(IGNORE)) { id = null; return; }
+    const t = e.touches[0];
+    id = t.identifier; sx = t.clientX; sy = t.clientY; axis = null;
   }, { passive: true });
-  screen.addEventListener("touchend", (e) => {
-    if (!tracking) return;
-    tracking = false;
-    const dx = e.changedTouches[0].clientX - sx;
-    const dy = e.changedTouches[0].clientY - sy;
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) return; // mostly vertical = scrolling
-    const i = VIEW_ORDER.indexOf(settings.view === "insights" ? "insights" : settings.view === "map" ? "map" : "list");
-    const next = VIEW_ORDER[i + (dx < 0 ? 1 : -1)];
-    if (next) gotoView(next);
+
+  el.addEventListener("touchmove", (e) => {
+    if (id === null) return;
+    const t = [...e.touches].find((x) => x.identifier === id);
+    if (!t) return;
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (!axis && Math.abs(dx) + Math.abs(dy) > 10) {
+      axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";   // lock the axis once
+    }
   }, { passive: true });
-})();
+
+  el.addEventListener("touchend", (e) => {
+    if (id === null) return;
+    const t = [...e.changedTouches].find((x) => x.identifier === id);
+    id = null;
+    if (!t || axis !== "x") return;
+    const dx = t.clientX - sx;
+    if (Math.abs(dx) < 55) return;
+    handler(dx < 0 ? 1 : -1);
+  }, { passive: true });
+
+  el.addEventListener("touchcancel", () => { id = null; }, { passive: true });
+}
+
+/* Khayals: swipe between Memories, Map and Insights */
+onHorizontalSwipe($("screen-thoughts"), (dir) => {
+  const i = VIEW_ORDER.indexOf(settings.view);
+  const next = VIEW_ORDER[(i < 0 ? 0 : i) + dir];
+  if (next) gotoView(next);
+});
+
+/* Capture: swipe between Khayal and To-do, so the segmented control at the
+   top is a shortcut rather than the only way there */
+onHorizontalSwipe($("screen-capture"), (dir) => {
+  const next = dir > 0 ? "todo" : "khayal";
+  if (next !== captureMode) setMode(next);
+});
 
 /* ================= khayal detail sheet ================= */
 /* Following a connected khayal replaces the sheet's contents rather than
@@ -1905,7 +1986,7 @@ function renderRelated(t) {
       <span class="rel-bar"><i style="width:${Math.round(Math.min(1, s) * 100)}%"></i></span>
       <span class="rel-text">
         <b>${esc(o.title || generateTitle(o.text))}</b>
-        <em>${["Regular", "High", "Core"][o.tier]} · ${relTime(o.createdAt)}</em>
+        <em>${["Regular", "Bright", "Core"][o.tier]} · ${relTime(o.createdAt)}</em>
       </span>
     </button>`).join("");
   list.querySelectorAll(".related-item").forEach((el) =>
@@ -2034,7 +2115,7 @@ function renderReviewCard() {
       <button class="btn danger" id="rvPurge">Purge</button>
       <button class="btn later" id="rvLater">Later</button>
       <button class="btn keep" id="rvKeep">Keep</button>
-      <button class="btn promote" id="rvPromote">${t.tier >= 2 ? "Core ✓" : t.tier === 1 ? "Make Core" : "Make High"}</button>
+      <button class="btn promote" id="rvPromote">${t.tier >= 2 ? "Core ✓" : t.tier === 1 ? "Make Core" : "Make Bright"}</button>
     </div>`;
   staggerIn(area, ".review-card", 0, 0);
   $("rvPurge").addEventListener("click", async () => {
@@ -2052,7 +2133,7 @@ function renderReviewCard() {
     t.tier = Math.min(t.tier + 1, 2);
     t.lastReviewedAt = now(); t.reviewCount = (t.reviewCount || 0) + 1; t.snoozedUntil = null;
     await dbPut("thoughts", t); buzz(14);
-    toast(t.tier === 2 ? "Core memory" : "High memory");
+    toast(t.tier === 2 ? "Core memory" : "Bright memory");
     nextReview();
   });
 }
@@ -2473,6 +2554,14 @@ $("hudClose").addEventListener("click", () => { hideLayer($("mapHud")); });
 $("mapZoomIn").addEventListener("click", () => { buzz(6); MapView.zoomBy(1.25); });
 $("mapZoomOut").addEventListener("click", () => { buzz(6); MapView.zoomBy(0.8); });
 $("mapReset").addEventListener("click", () => { buzz(8); MapView.resetView(); });
+$("mapFull").addEventListener("click", () => {
+  const wrap = document.querySelector(".map-wrap");
+  const full = wrap.classList.toggle("full");
+  document.body.classList.toggle("locked", full);
+  $("mapFull").textContent = full ? "✕" : "⛶";
+  buzz(10);
+  setTimeout(() => MapView.rebuild(), 60);   // relayout for the new canvas size
+});
 
 /* The canvas owns single-finger drags, so on the map a two-finger sweep is
    what moves between views. Edge strips are avoided deliberately: iOS reserves

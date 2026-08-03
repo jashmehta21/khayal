@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=26">
+<link rel="stylesheet" href="app.css?v=27">
 </head>
 <body>
 
@@ -90,9 +90,6 @@
     <header class="screen-head">
       <div class="head-row">
         <h1>To-dos</h1>
-        <button id="clearDoneBtn" class="icon-btn" aria-label="Clear completed" hidden>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
-        </button>
       </div>
       <p class="sub" id="todoStat"></p>
     </header>
@@ -171,7 +168,7 @@
         <button class="chip day-chip" id="dayChip" hidden></button>
         <button class="chip filter-chip active" data-filter="all">All</button>
         <button class="chip filter-chip" data-filter="core">Core</button>
-        <button class="chip filter-chip" data-filter="high">High</button>
+        <button class="chip filter-chip" data-filter="high">Bright</button>
         <button class="chip filter-chip" data-filter="fading">Fading</button>
       </div>
       <div id="thoughtList" class="thought-list"></div>
@@ -189,6 +186,7 @@
         
         
         <div class="map-tools">
+          <button id="mapFull" aria-label="Full screen">⛶</button>
           <button id="mapZoomIn" aria-label="Zoom in">＋</button>
           <button id="mapZoomOut" aria-label="Zoom out">－</button>
           <button id="mapReset" aria-label="Reset view">⌖</button>
@@ -207,7 +205,7 @@
       <div class="map-foot">
         <div class="map-legend">
           <span><i class="dot-core"></i>Core</span>
-          <span><i class="dot-high"></i>High</span>
+          <span><i class="dot-high"></i>Bright</span>
           <span><i class="dot-reg"></i>Regular</span>
         </div>
         <button id="mapRelink" class="chip tiny-chip">↻ Refresh</button>
@@ -416,7 +414,7 @@
     <div class="card">
       <div class="micro-label">ABOUT</div>
       <p class="note" id="buildLine"></p>
-      <p class="note">Khayal keeps everything private — nothing ever leaves this device. Voice uses your phone's built-in speech engine, and Hindi is written in English letters automatically.<br><br><b>Core</b> — the khayals that define you. <b>High</b> — worth keeping. <b>Regular</b> — reviewed over time, purged when they fade.</p>
+      <p class="note">Khayal keeps everything private — nothing ever leaves this device. Voice uses your phone's built-in speech engine, and Hindi is written in English letters automatically.<br><br><b>Core</b> — the khayals that define you. <b>Bright</b> — worth keeping. <b>Regular</b> — reviewed over time, purged when they fade.</p>
     </div>
   </section>
 </div>
@@ -466,7 +464,7 @@
     <div class="micro-label mt">KEEP AS</div>
     <div class="chip-row">
       <button class="chip tier-chip" data-tier="0">Regular</button>
-      <button class="chip tier-chip" data-tier="1">High</button>
+      <button class="chip tier-chip" data-tier="1">Bright</button>
       <button class="chip tier-chip" data-tier="2">Core</button>
     </div>
     <div id="relatedWrap" hidden>
@@ -550,7 +548,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="mind.js?v=9"></script>
-<script src="app.js?v=22"></script>
+<script src="mind.js?v=10"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

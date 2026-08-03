@@ -324,7 +324,7 @@ const MapView = (() => {
   let drag = null, pinch = null;
   let t0 = 0;
 
-  const TIER_COLOR = ["#9c96a8", "#dfe6ee", "#f0c04a"]; // regular, chrome, gold
+  const TIER_COLOR = ["#8f89a0", "#8fdfef", "#ffd766"]; // regular, bright cyan, warm gold
   const TIER_R = [3.2, 5, 7.4];
 
   let starfield = [];
@@ -332,10 +332,10 @@ const MapView = (() => {
     starfield = [];
     let seed = 9;
     const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-    for (let i = 0; i < 140; i++) {
+    for (let i = 0; i < 260; i++) {
       starfield.push({
-        x: rnd(), y: rnd(), r: rnd() * 1.1 + 0.25,
-        a: rnd() * 0.5 + 0.12, tw: rnd() * 1.6 + 0.4, p: rnd() * 6.28,
+        x: rnd(), y: rnd(), r: rnd() * rnd() * 1.5 + 0.2,
+        a: rnd() * 0.55 + 0.1, tw: rnd() * 1.1 + 0.25, p: rnd() * 6.28,
       });
     }
   }
@@ -497,7 +497,7 @@ const MapView = (() => {
         else if (e.b === focusId) neighbours.add(e.a);
       }
     }
-    if (autoSpin && !still && !drag) yaw += 0.0022;
+    if (autoSpin && !still && !drag) yaw += 0.0007;   // a slow, calm drift
 
     const pos = new Map();
     for (const nd of nodes) pos.set(nd.id, project(nd, still ? 0 : time));
@@ -530,16 +530,29 @@ const MapView = (() => {
         * Math.min(Math.max(cam.z, 0.7), 1.5) * (0.55 + p.d * 0.75);
       const col = TIER_COLOR[nd.tier] || TIER_COLOR[0];
 
-      if (nd.tier === 2 && !dim) {
-        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 4.5);
-        glow.addColorStop(0, "rgba(240,192,74,0.3)");
-        glow.addColorStop(1, "rgba(240,192,74,0)");
+      // Core and Bright get a halo and a slow shimmer, so they read as real stars
+      const shimmer = still ? 1 : 0.82 + 0.18 * Math.sin(time * 1.1 + nd.seed * 2.3);
+      if (nd.tier > 0 && !dim) {
+        const gcol = nd.tier === 2 ? "240,192,74" : "120,214,233";
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5.2);
+        glow.addColorStop(0, `rgba(${gcol},${(nd.tier === 2 ? 0.34 : 0.24) * shimmer})`);
+        glow.addColorStop(1, `rgba(${gcol},0)`);
         ctx.fillStyle = glow;
-        ctx.beginPath(); ctx.arc(p.x, p.y, r * 4.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * 5.2, 0, Math.PI * 2); ctx.fill();
       }
-      ctx.globalAlpha = (dim ? 0.22 : 1) * Math.min(1, 0.35 + p.d * 0.8);
+      ctx.globalAlpha = (dim ? 0.22 : 1) * Math.min(1, 0.35 + p.d * 0.8) * (nd.tier ? shimmer : 1);
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+      // a four-point sparkle on the brightest ones
+      if (nd.tier > 0 && !dim && p.d > 0.55) {
+        const L = r * (nd.tier === 2 ? 3.4 : 2.4) * shimmer;
+        ctx.strokeStyle = nd.tier === 2 ? "rgba(255,225,150,0.55)" : "rgba(190,235,247,0.45)";
+        ctx.lineWidth = Math.max(0.6, r * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(p.x - L, p.y); ctx.lineTo(p.x + L, p.y);
+        ctx.moveTo(p.x, p.y - L); ctx.lineTo(p.x, p.y + L);
+        ctx.stroke();
+      }
       if (isFocus) {
         ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2); ctx.stroke();

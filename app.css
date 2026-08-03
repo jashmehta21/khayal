@@ -23,8 +23,8 @@
   /* second tier colour — warm ochre, clearly distinct from the coral of Core */
   --core: #c8961c;
   --core-soft: #f9f0d9;
-  --high: #8b95a1;
-  --high-soft: #eef1f5;
+  --high: #1aa5c4;
+  --high-soft: #e3f5fa;
 
   --r-card: 24px;
   --r-inner: 16px;
@@ -160,7 +160,7 @@ h3 { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.02em; }
 .tier-chip.active[data-tier="2"],
 .filter-chip.active[data-filter="core"] { background: linear-gradient(135deg,#e0b849,#b8860b); border-color: transparent; color: #fff; }
 .tier-chip.active[data-tier="1"],
-.filter-chip.active[data-filter="high"] { background: linear-gradient(135deg,#c3ccd6,#7d8894); border-color: transparent; color: #fff; }
+.filter-chip.active[data-filter="high"] { background: linear-gradient(135deg,#4fc7e3,#0d8fae); border-color: transparent; color: #fff; }
 .chip-accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .chip-row.scroll-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 10px 0 14px; }
@@ -429,7 +429,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
   padding: 3px 8px; border-radius: var(--pill); color: #fff;
 }
 .tier-badge.t2 { background: linear-gradient(135deg,#e6c25c,#b8860b); }
-.tier-badge.t1 { background: linear-gradient(135deg,#cdd5de,#79838f); }
+.tier-badge.t1 { background: linear-gradient(135deg,#4fc7e3,#0d8fae); }
 .fade-tag { color: var(--accent); }
 
 .day-head {
@@ -547,7 +547,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .map-legend span { display: flex; align-items: center; gap: 5px; }
 .map-legend i { width: 8px; height: 8px; border-radius: 50%; display: block; }
 .dot-core { background: linear-gradient(135deg,#e6c25c,#b8860b); }
-.dot-high { background: linear-gradient(135deg,#cdd5de,#79838f); }
+.dot-high { background: linear-gradient(135deg,#4fc7e3,#0d8fae); }
 .dot-reg { background: var(--faint); }
 
 /* ---------- related khayals ---------- */
@@ -1027,3 +1027,24 @@ body.locked { overflow: hidden; position: fixed; width: 100%; }
   font-size: 1rem; font-weight: 800; cursor: pointer;
 }
 .stepper .val { min-width: 54px; text-align: center; font-weight: 800; font-size: 0.88rem; }
+/* the sheet's fields must not melt into the sheet's own background */
+.sheet #detailTitle, .sheet #detailText, .sheet #todoText {
+  background: var(--card); box-shadow: inset 0 0 0 1px var(--line);
+}
+/* a Core khayal should feel like one */
+.thought-card.tier-2 {
+  background: linear-gradient(135deg, #fdf3dc 0%, #fff9ec 55%, #fdf0d2 100%);
+  box-shadow: 0 1px 0 rgba(200,150,28,0.18), 0 6px 18px rgba(200,150,28,0.10);
+}
+.thought-card.tier-1 {
+  background: linear-gradient(135deg, #e6f7fc 0%, #f4fcfe 60%, #e2f5fb 100%);
+}
+.map-wrap.full {
+  position: fixed; inset: 0; z-index: 120; border-radius: 0; height: 100dvh; max-height: none;
+}
+.map-wrap.full .map-tools { top: calc(env(safe-area-inset-top, 0px) + 14px); }
+/* swipe rows: the label behind reveals as you pull, and arms with a nudge */
+.todo-row .swipe-back { opacity: 0; transition: opacity 0.18s var(--ease); }
+.todo-row.armed .swipe-back { filter: saturate(1.15); }
+.todo-row.swiping .todo-item { transition: none; }
+.todo-row { transition: opacity 0.2s var(--ease); }
