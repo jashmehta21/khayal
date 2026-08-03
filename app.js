@@ -147,7 +147,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v15";                      // shown in Settings so we can confirm what's running
+const BUILD = "v16";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
 
@@ -164,53 +164,82 @@ Dictated text:
 `;
 
 function smartKey() { return localStorage.getItem("khayal-key") || ""; }
-function smartModel() { return localStorage.getItem("khayal-model") || DEFAULT_MODEL; }
+function smartModel() { return localStorage.getItem("khayal-model") || ""; }
 function smartEnabled() { return settings.smart === true && !!smartKey(); }
 
-async function smartCleanup(text) {
+/* Which service the key belongs to. OpenAI's request format is spoken by xAI,
+   Groq, OpenRouter and most others, so "custom" covers them with a base URL. */
+function smartProvider() { return localStorage.getItem("khayal-provider") || "openai"; }
+function smartBase() {
+  const p = smartProvider();
+  if (p === "openai") return "https://api.openai.com/v1";
+  if (p === "custom") return (localStorage.getItem("khayal-base") || "").replace(/\/+$/, "");
+  return apiBase(); // gemini, version-detected in mind.js
+}
+const isGemini = () => smartProvider() === "gemini";
+
+/* one chat call, whichever provider is configured */
+async function chatComplete(prompt, { temperature = 0.2, timeout = SMART_TIMEOUT } = {}) {
   const key = smartKey();
-  if (!key) throw new Error("No API key saved");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(smartModel())}:generateContent?key=${encodeURIComponent(key)}`;
+  if (!key) throw new Error("No API key");
+  const model = smartModel();
+  if (!model) throw new Error("No model chosen — tap Test");
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), SMART_TIMEOUT);
+  const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: ctrl.signal,
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: CLEANUP_PROMPT + text }] }],
-        generationConfig: { temperature: 0.2, topP: 0.9 },
-      }),
-    });
+    let url, headers, body;
+    if (isGemini()) {
+      url = `${smartBase()}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+      headers = { "Content-Type": "application/json" };
+      body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature, topP: 0.9 } };
+    } else {
+      url = `${smartBase()}/chat/completions`;
+      headers = { "Content-Type": "application/json", Authorization: "Bearer " + key };
+      body = { model, messages: [{ role: "user", content: prompt }], temperature };
+    }
+    const res = await fetch(url, { method: "POST", headers, signal: ctrl.signal, body: JSON.stringify(body) });
     if (!res.ok) {
-      let detail = "";
-      try { detail = (await res.json()).error?.message || ""; } catch (_) {}
-      throw new Error(friendlyApiError(res.status, detail));
+      let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
+      throw new Error(friendlyApiError(res.status, d));
     }
     const data = await res.json();
-    const out = (data.candidates?.[0]?.content?.parts || [])
-      .map((p) => p.text || "").join("").trim();
+    const out = isGemini()
+      ? (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim()
+      : (data.choices?.[0]?.message?.content || "").trim();
     if (!out) throw new Error("The model returned nothing");
     return out;
-  } finally {
-    clearTimeout(timer);
-  }
+  } finally { clearTimeout(timer); }
+}
+
+async function smartCleanup(text) {
+  return chatComplete(CLEANUP_PROMPT + text);
 }
 
 function friendlyApiError(status, detail) {
   const d = String(detail || "");
-  if (status === 400 && /API key not valid/i.test(d)) return "That key isn't valid";
-  // Workspace/Cloud specifics — these look like a key problem but aren't
-  if (/SERVICE_DISABLED|has not been used in project|is disabled/i.test(d))
-    return "The Generative Language API is switched off for this key's Google Cloud project. Enable it, or use a key from a personal Gmail account.";
-  if (/consumer|blocked|organization|policy|restricted/i.test(d) && status === 403)
-    return "Your Google Workspace admin policy is blocking AI Studio. Turn on Google AI Studio in the Admin console, or use a personal Gmail key.";
-  if (status === 401 || status === 403)
-    return "Key rejected. On a Workspace account this usually means AI Studio is off for your org — a personal Gmail key is the quick fix.";
+  const google = smartProvider() === "gemini";
+
+  if (/API key not valid|Incorrect API key/i.test(d)) return "That key isn't valid";
+  if (/quota|billing|insufficient|credit/i.test(d))
+    return google ? "Free-tier limit reached — try again later"
+                  : "Out of credit on that account — top it up or check billing";
+
+  if (google) {
+    // Workspace/Cloud specifics — these look like a key problem but aren't
+    if (/SERVICE_DISABLED|has not been used in project|is disabled/i.test(d))
+      return "The Generative Language API is switched off for this key's Google Cloud project. Enable it, or use a key from a personal Gmail account.";
+    if (status === 403 && /consumer|blocked|organization|policy|restricted/i.test(d))
+      return "Your Google Workspace admin policy is blocking AI Studio. Turn on Google AI Studio in the Admin console, or use a personal Gmail key.";
+    if (status === 401 || status === 403)
+      return "Key rejected. On a Workspace account this usually means AI Studio is off for your org — a personal Gmail key is the quick fix.";
+  } else {
+    if (status === 401) return "That key was rejected — check you copied all of it";
+    if (status === 403) return "That key isn't allowed to use this. Check the project or region.";
+  }
+
   if (status === 404) return "That model name doesn't exist for your key";
-  if (status === 429) return "Free-tier limit reached — try again later";
-  if (status >= 500) return "Google's service is having trouble";
+  if (status === 429) return google ? "Free-tier limit reached — try again later" : "Rate limited — wait a moment and retry";
+  if (status >= 500) return "The provider's service is having trouble";
   return d ? d.slice(0, 140) : "Request failed (" + status + ")";
 }
 
@@ -1737,8 +1766,14 @@ $("emptyTrashBtn").addEventListener("click", async () => {
 /* ---- smart cleanup settings ---- */
 function setModelOptions(ids, selected) {
   const sel = $("apiModel");
-  const list = ids && ids.length ? [...new Set(ids)] : [selected || smartModel()];
-  sel.innerHTML = list.map((id) =>
+  const list = (ids || []).filter(Boolean);
+  if (!list.length) {
+    // an empty value, so a placeholder can never be saved as a real model name
+    sel.innerHTML = `<option value="">— tap Test to find models —</option>`;
+    sel.value = "";
+    return;
+  }
+  sel.innerHTML = [...new Set(list)].map((id) =>
     `<option value="${esc(id)}"${id === selected ? " selected" : ""}>${esc(id)}</option>`).join("");
   sel.value = selected && list.includes(selected) ? selected : list[0];
 }
@@ -1764,14 +1799,29 @@ function renderSmartState() {
   $("smartToggle").checked = on;
   $("smartConfig").hidden = !on;
   $("apiKey").value = smartKey();
-  if (!$("apiModel").options.length) setModelOptions(null, smartModel());
-  else $("apiModel").value = smartModel();
+  $("apiProvider").value = smartProvider();
+  $("baseWrap").hidden = smartProvider() !== "custom";
+  $("apiBaseUrl").value = localStorage.getItem("khayal-base") || "";
+  $("apiKey").placeholder = smartProvider() === "gemini" ? "Paste your Gemini key" : "sk-…";
+  setModelOptions(smartModel() ? [smartModel()] : [], smartModel());
   const s = $("smartStatus");
   if (!on) { s.textContent = ""; return; }
   s.textContent = smartKey()
     ? "Key saved on this device. Tap Test to check it works."
     : "Add a key below to switch this on.";
 }
+
+$("apiProvider").addEventListener("change", (e) => {
+  localStorage.setItem("khayal-provider", e.target.value);
+  // a model from one provider is meaningless to another
+  localStorage.removeItem("khayal-model");
+  localStorage.removeItem("khayal-embed-model");
+  renderSmartState();
+  $("smartStatus").textContent = "Paste that provider's key, then tap Test.";
+});
+$("apiBaseUrl").addEventListener("change", (e) => {
+  localStorage.setItem("khayal-base", e.target.value.trim().replace(/\/+$/, ""));
+});
 
 $("apiModel").addEventListener("change", (e) => {
   localStorage.setItem("khayal-model", e.target.value);
@@ -1817,9 +1867,9 @@ $("testKeyBtn").addEventListener("click", async () => {
      actually offers before giving up. */
   try {
     $("smartStatus").textContent = "Asking your key what it can run…";
-    let info = null;
+    let info = null, discoveryErr = null;
     try { info = await discoverModels({ quiet: true }); }
-    catch (e) { $("smartStatus").textContent = "Couldn't list models: " + e.message; }
+    catch (e) { discoveryErr = e; $("smartStatus").textContent = "Couldn't list models: " + e.message; }
 
     const candidates = info && info.chat.length
       ? [smartModel(), ...info.chat.filter((m) => m !== smartModel())]
@@ -1839,11 +1889,12 @@ $("testKeyBtn").addEventListener("click", async () => {
       $("smartStatus").textContent = `Working ✓ on ${used} (${localStorage.getItem("khayal-apiver") || "v1beta"})  →  ${out.slice(0, 70)}`;
       toast("Smart cleanup is live");
     } else {
-      // nothing worked — show the ground truth instead of a tidy guess
+      // nothing worked — lead with the root cause, not the symptom after it
       const found = info ? info.all.slice(0, 10).join(", ") : "none";
+      const reason = discoveryErr ? discoveryErr.message : (lastErr ? lastErr.message : "No model worked");
       $("smartStatus").innerHTML =
-        `✕ ${esc(lastErr ? lastErr.message : "No model worked")}<br><br>` +
-        `<b>Diagnostics</b><br>API: ${esc(localStorage.getItem("khayal-apiver") || "v1beta")}<br>` +
+        `✕ ${esc(reason)}<br><br>` +
+        `<b>Diagnostics</b><br>Provider: ${esc(smartProvider())} · ${esc(smartBase() || "no address")}<br>` +
         `Models your key reports (${info ? info.all.length : 0}): ${esc(found) || "none"}<br>` +
         `Build: ${esc(BUILD)}<br><br>Send me this and I'll fix it.`;
       toast("Test failed");

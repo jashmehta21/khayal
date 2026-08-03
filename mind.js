@@ -16,8 +16,37 @@ function apiBase() {
   return `https://generativelanguage.googleapis.com/${v}`;
 }
 
+/* ---- OpenAI-style discovery (also xAI, Groq, OpenRouter…) ---- */
+async function listModelsOpenAI() {
+  const key = smartKey();
+  const base = smartBase();
+  if (!base) throw new Error("Set the API address first");
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(`${base}/models`, {
+      headers: { Authorization: "Bearer " + key }, signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
+      throw new Error(friendlyApiError(res.status, d));
+    }
+    const data = await res.json();
+    const ids = (data.data || data.models || []).map((m) => String(m.id || m.name || ""));
+    if (!ids.length) throw new Error("That key returned no models");
+    // no capability flags in this API, so split on well-known naming
+    const bad = /embedding|whisper|tts|dall|image|moderation|audio|realtime|transcribe|search|rerank/i;
+    return {
+      version: "openai",
+      all: ids,
+      chat: ids.filter((id) => !bad.test(id)),
+      embed: ids.filter((id) => /embedding/i.test(id)),
+    };
+  } finally { clearTimeout(timer); }
+}
+
 /* Ask the API what this key can actually use, across every API version. */
-async function listModels() {
+async function listModelsGemini() {
   const key = smartKey();
   if (!key) throw new Error("No API key");
   let lastErr = null;
@@ -55,17 +84,22 @@ async function listModels() {
   throw lastErr || new Error("Could not reach the model list");
 }
 
-/* Prefer something fast and current; fall back to whatever exists. */
+const listModels = () => (smartProvider() === "gemini" ? listModelsGemini() : listModelsOpenAI());
+
+/* Prefer something fast, cheap and current; fall back to whatever exists. */
 function pickChatModel(ids) {
   const score = (id) => {
     let s = 0;
-    if (/flash/.test(id)) s += 40;
-    if (/lite/.test(id)) s += 5;
-    if (/latest/.test(id)) s += 12;
-    if (/pro/.test(id)) s += 8;
-    const v = /(\d+)\.(\d+)/.exec(id);
-    if (v) s += Number(v[1]) * 6 + Number(v[2]);
-    if (/preview|exp|thinking|tuning|vision|image|audio|tts|live/.test(id)) s -= 30;
+    // "mini" must be its own word — otherwise "ge-mini" scores as the cheap tier
+    if (/flash|(^|[-_. ])mini|haiku|turbo/i.test(id)) s += 40;
+    if (/(^|[-_. ])(nano|lite)/i.test(id)) s += 20;
+    if (/latest/i.test(id)) s += 12;
+    if (/^gpt|gemini|grok|llama|claude/i.test(id)) s += 10;
+    if (/pro|opus/i.test(id)) s += 4;
+    const v = /(\d+)(?:[.-](\d+))?/.exec(id);
+    if (v) s += Number(v[1]) * 5 + (Number(v[2]) || 0);
+    if (/preview|exp|thinking|vision|image|audio|tts|live|instruct|tuning|realtime|search/i.test(id)) s -= 40;
+    if (/\d{4}-\d{2}-\d{2}|\d{4}$/.test(id)) s -= 6;   // prefer unpinned aliases
     return s;
   };
   return [...ids].sort((a, b) => score(b) - score(a))[0] || null;
@@ -73,11 +107,13 @@ function pickChatModel(ids) {
 function pickEmbedModel(ids) {
   const score = (id) => {
     let s = 0;
-    if (/embedding/.test(id)) s += 20;
-    if (/text-embedding/.test(id)) s += 10;
+    if (/embedding/i.test(id)) s += 20;
+    if (/text-embedding/i.test(id)) s += 10;
+    if (/small/i.test(id)) s += 8;                     // cheapest that works well
+    if (/large/i.test(id)) s += 2;
     const v = /(\d+)/.exec(id.replace(/[^0-9]/g, " ").trim());
     if (v) s += Number(v[1]);
-    if (/exp|preview/.test(id)) s -= 15;
+    if (/exp|preview|ada/i.test(id)) s -= 15;
     return s;
   };
   return [...ids].sort((a, b) => score(b) - score(a))[0] || null;
@@ -156,48 +192,46 @@ function cosine(a, b) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
-async function embedOne(text) {
-  const key = smartKey();
-  if (!key) throw new Error("No API key");
-  const url = `${apiBase()}/models/${embedModel()}:embedContent?key=${encodeURIComponent(key)}`;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
-  try {
-    const res = await fetch(url, {
-      method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-      body: JSON.stringify({ model: "models/" + embedModel(), content: { parts: [{ text: text.slice(0, 8000) }] } }),
-    });
-    if (!res.ok) {
-      let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
-      throw new Error(friendlyApiError(res.status, d));
-    }
-    const data = await res.json();
-    const vals = data.embedding?.values;
-    if (!vals) throw new Error("No embedding returned");
-    return Float32Array.from(vals);
-  } finally { clearTimeout(timer); }
-}
-
+/* One batch call, whichever provider is configured. */
 async function embedBatch(texts) {
   const key = smartKey();
   if (!key) throw new Error("No API key");
-  const url = `${apiBase()}/models/${embedModel()}:batchEmbedContents?key=${encodeURIComponent(key)}`;
+  const model = embedModel();
+  if (!model) throw new Error("No embedding model — tap Test in Settings");
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30000);
+  const clipped = texts.map((t) => String(t).slice(0, 8000));
   try {
-    const res = await fetch(url, {
-      method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-      body: JSON.stringify({
-        requests: texts.map((t) => ({ model: "models/" + embedModel(), content: { parts: [{ text: t.slice(0, 8000) }] } })),
-      }),
-    });
+    let url, headers, body;
+    if (smartProvider() === "gemini") {
+      url = `${smartBase()}/models/${model}:batchEmbedContents?key=${encodeURIComponent(key)}`;
+      headers = { "Content-Type": "application/json" };
+      body = { requests: clipped.map((t) => ({ model: "models/" + model, content: { parts: [{ text: t }] } })) };
+    } else {
+      url = `${smartBase()}/embeddings`;
+      headers = { "Content-Type": "application/json", Authorization: "Bearer " + key };
+      body = { model, input: clipped };
+    }
+    const res = await fetch(url, { method: "POST", headers, signal: ctrl.signal, body: JSON.stringify(body) });
     if (!res.ok) {
       let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
       throw new Error(friendlyApiError(res.status, d));
     }
     const data = await res.json();
-    return (data.embeddings || []).map((e) => Float32Array.from(e.values));
+    if (smartProvider() === "gemini") {
+      return (data.embeddings || []).map((e) => Float32Array.from(e.values));
+    }
+    return (data.data || [])
+      .slice()
+      .sort((a, b) => (a.index || 0) - (b.index || 0))
+      .map((e) => Float32Array.from(e.embedding));
   } finally { clearTimeout(timer); }
+}
+
+async function embedOne(text) {
+  const [vec] = await embedBatch([text]);
+  if (!vec) throw new Error("No embedding returned");
+  return vec;
 }
 
 /* give every khayal a vector, in chunks, tolerating failure */
@@ -630,23 +664,9 @@ async function askKhayals(question) {
       sources: hits.map((h) => h.t),
     };
   }
-  const url = `${apiBase()}/models/${encodeURIComponent(smartModel())}:generateContent?key=${encodeURIComponent(key)}`;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25000);
-  try {
-    const res = await fetch(url, {
-      method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${ASK_PROMPT}\n\nKHAYALS:\n${context}\n\nQUESTION: ${question}` }] }],
-        generationConfig: { temperature: 0.4 },
-      }),
-    });
-    if (!res.ok) {
-      let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
-      throw new Error(friendlyApiError(res.status, d));
-    }
-    const data = await res.json();
-    const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
-    return { answer: text || "I couldn't put that into words.", sources: hits.map((h) => h.t) };
-  } finally { clearTimeout(timer); }
+  const text = await chatComplete(
+    `${ASK_PROMPT}\n\nKHAYALS:\n${context}\n\nQUESTION: ${question}`,
+    { temperature: 0.4, timeout: 25000 }
+  );
+  return { answer: text || "I couldn't put that into words.", sources: hits.map((h) => h.t) };
 }

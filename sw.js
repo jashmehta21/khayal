@@ -1,12 +1,12 @@
 /* Khayal service worker — offline shell + to-do notifications. */
 /* Bump VERSION and the ?v= tags in index.html together when shipping changes. */
-const VERSION = "khayal-v16";
+const VERSION = "khayal-v17";
 const ASSETS = [
   "./",
   "./index.html",
-  "./app.css?v=15",
-  "./mind.js?v=4",
-  "./app.js?v=15",
+  "./app.css?v=16",
+  "./mind.js?v=5",
+  "./app.js?v=16",
   "./manifest.webmanifest",
   "./fonts/jakarta.woff2",
   "./icons/icon-192.png",

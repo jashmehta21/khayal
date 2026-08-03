@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=15">
+<link rel="stylesheet" href="app.css?v=16">
 </head>
 <body>
 
@@ -262,7 +262,7 @@
 
     <div class="card">
       <div class="micro-label">SMART CLEANUP</div>
-      <p class="note">Rewrites your dictation into clean, readable writing — like Wispr Flow. Free on Google's Gemini free tier, using your own key.</p>
+      <p class="note">Rewrites your dictation into clean, readable writing — like Wispr Flow. Uses your own API key, kept on this device.</p>
       <label class="switch-row" for="smartToggle">
         <span class="switch-label">Smart cleanup
           <em>Runs when you stop the mic. Falls back to offline polish if it fails.</em>
@@ -270,8 +270,18 @@
         <input type="checkbox" id="smartToggle" class="switch">
       </label>
       <div id="smartConfig" hidden>
+        <div class="micro-label mt">PROVIDER</div>
+        <select id="apiProvider" class="field-select">
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="custom">Other (OpenAI-compatible)</option>
+        </select>
+        <div id="baseWrap" hidden>
+          <div class="micro-label mt">API ADDRESS</div>
+          <input type="text" id="apiBaseUrl" placeholder="https://api.x.ai/v1" autocomplete="off" spellcheck="false">
+        </div>
         <div class="micro-label mt">API KEY</div>
-        <input type="password" id="apiKey" placeholder="Paste your Gemini key" autocomplete="off" spellcheck="false">
+        <input type="password" id="apiKey" placeholder="Paste your key" autocomplete="off" spellcheck="false">
         <div class="label-row mt">
           <span class="micro-label">MODEL</span>
           <button id="findModelsBtn" class="chip tiny-chip">↻ Find models</button>
@@ -285,12 +295,18 @@
         <details class="how">
           <summary>How to get a free key (2 minutes)</summary>
           <ol>
-            <li>Open <b>aistudio.google.com/apikey</b> in your browser.</li>
-            <li>Sign in with a <b>personal Gmail</b> account, not a Workspace one.</li>
-            <li>Tap <b>Create API key</b>, then copy it.</li>
-            <li>Paste it above and tap <b>Test</b>.</li>
+            <li>Open <b>platform.openai.com/api-keys</b> (or aistudio.google.com/apikey for Gemini).</li>
+            <li>Create a key and copy it.</li>
+            <li>Pick the matching provider above, paste the key, tap <b>Test</b>.</li>
           </ol>
-          <p><b>On a Workspace account?</b> AI Studio is an admin-controlled service and is off by default in most organisations, so keys made there resolve no models. A personal Gmail key is the quickest fix — or, as admin, enable Google AI Studio in the Admin console and the Generative Language API on the key's Cloud project.</p>
+          <p><b>Using OpenAI instead?</b> Choose OpenAI above and paste a key from
+          <b>platform.openai.com/api-keys</b>. It bills your API credits, and this app's usage is
+          tiny — cleanups and questions cost a fraction of a cent each.</p>
+          <p><b>Something else?</b> Pick "Other" and give the API address — anything that speaks the
+          OpenAI format works, including xAI (<b>https://api.x.ai/v1</b>), Groq and OpenRouter.
+          Note a Grok <i>subscription</i> is separate from xAI <i>API</i> credits.</p>
+          <p><b>Google Workspace accounts</b> usually fail here: AI Studio is admin-controlled and off
+          by default, so keys made there resolve no models.</p>
           <p>The key stays on this device only — it is never uploaded and never stored in the app's code. With smart cleanup on, the words you dictate are sent to Google to be rewritten; everything else in Khayal still stays on your phone.</p>
         </details>
       </div>
@@ -472,7 +488,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="mind.js?v=4"></script>
-<script src="app.js?v=15"></script>
+<script src="mind.js?v=5"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>
