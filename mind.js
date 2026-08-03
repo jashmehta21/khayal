@@ -324,8 +324,21 @@ const MapView = (() => {
   let drag = null, pinch = null;
   let t0 = 0;
 
-  const TIER_COLOR = ["#b5b1a8", "#b07d16", "#f05337"];
-  const TIER_R = [3.4, 5, 7];
+  const TIER_COLOR = ["#9c96a8", "#dfe6ee", "#f0c04a"]; // regular, chrome, gold
+  const TIER_R = [3.2, 5, 7.4];
+
+  let starfield = [];
+  function makeStarfield() {
+    starfield = [];
+    let seed = 9;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let i = 0; i < 140; i++) {
+      starfield.push({
+        x: rnd(), y: rnd(), r: rnd() * 1.1 + 0.25,
+        a: rnd() * 0.5 + 0.12, tw: rnd() * 1.6 + 0.4, p: rnd() * 6.28,
+      });
+    }
+  }
 
   function ensureCanvas() {
     canvas = document.getElementById("mapCanvas");
@@ -432,7 +445,7 @@ const MapView = (() => {
 
   /* Nodes live in 3D and are projected with perspective, so the cloud has real
      depth: it turns slowly on its own, and dragging spins it. */
-  let yaw = 0, pitch = -0.18, autoSpin = true;
+  let yaw = 0, pitch = -0.18, autoSpin = true, onSweep = null;
   const FOCAL = 620;
 
   function project(nd, t) {
@@ -458,7 +471,23 @@ const MapView = (() => {
     if (!running) return;
     if (!t0) t0 = ts;
     const time = (ts - t0) / 1000;
-    ctx.clearRect(0, 0, W, H);
+
+    // deep-sky backdrop so the constellation reads sharply against it
+    const sky = ctx.createRadialGradient(W * 0.5, H * 0.42, 0, W * 0.5, H * 0.42, Math.max(W, H) * 0.8);
+    sky.addColorStop(0, "#241f33");
+    sky.addColorStop(0.55, "#171325");
+    sky.addColorStop(1, "#0d0b16");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    if (!starfield.length) makeStarfield();
+    for (const s of starfield) {
+      const tw = 0.45 + 0.55 * Math.abs(Math.sin(time * s.tw + s.p));
+      ctx.globalAlpha = s.a * tw;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
     const still = document.body.classList.contains("no-motion");
     const neighbours = new Set();
@@ -482,8 +511,8 @@ const MapView = (() => {
       const dim = focusId && !lit;
       const depth = (p.d + q.d) / 2;
       ctx.strokeStyle = lit
-        ? `rgba(240,83,55,${(0.25 + e.w * 0.5) * depth})`
-        : `rgba(20,18,15,${(dim ? 0.03 : 0.05 + e.w * 0.13) * depth})`;
+        ? `rgba(240,192,74,${(0.35 + e.w * 0.5) * depth})`
+        : `rgba(200,205,220,${(dim ? 0.06 : 0.12 + e.w * 0.22) * depth})`;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
       ctx.lineTo(q.x, q.y);
@@ -503,8 +532,8 @@ const MapView = (() => {
 
       if (nd.tier === 2 && !dim) {
         const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 4.5);
-        glow.addColorStop(0, "rgba(240,83,55,0.22)");
-        glow.addColorStop(1, "rgba(240,83,55,0)");
+        glow.addColorStop(0, "rgba(240,192,74,0.3)");
+        glow.addColorStop(1, "rgba(240,192,74,0)");
         ctx.fillStyle = glow;
         ctx.beginPath(); ctx.arc(p.x, p.y, r * 4.5, 0, Math.PI * 2); ctx.fill();
       }
@@ -512,7 +541,7 @@ const MapView = (() => {
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
       if (isFocus) {
-        ctx.strokeStyle = "#16140f"; ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2); ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -527,11 +556,11 @@ const MapView = (() => {
         const p = pos.get(nd.id);
         const label = nd.title.length > 26 ? nd.title.slice(0, 25) + "…" : nd.title;
         const w = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.fillStyle = "rgba(12,10,20,0.82)";
         ctx.beginPath();
         ctx.roundRect(p.x - w / 2 - 5, p.y + 10, w + 10, 16, 8);
         ctx.fill();
-        ctx.fillStyle = nd.id === focusId ? "#16140f" : "#3d3a34";
+        ctx.fillStyle = nd.id === focusId ? "#ffffff" : "#cfd4e0";
         ctx.fillText(label, p.x, p.y + 22);
       }
     }
@@ -589,6 +618,8 @@ const MapView = (() => {
       if (active.size >= 2 && pinch) {
         const [a, b] = [...active.values()];
         const d = dist(a, b), m = mid(a, b);
+        pinch.travel = (pinch.travel || 0) + (m.x - pinch.m.x);
+        pinch.dz = (pinch.dz || 0) + Math.abs(d - pinch.d);
         if (pinch.d > 0) cam.z = Math.max(0.25, Math.min(5, pinch.z * (d / pinch.d)));
         cam.x += (m.x - pinch.m.x) / cam.z;
         cam.y += (m.y - pinch.m.y) / cam.z;
@@ -611,6 +642,10 @@ const MapView = (() => {
         focusId = nd ? (focusId === nd.id ? null : nd.id) : null;
         showHud(focusId ? nd : null);
         if (nd) buzz(8);
+      }
+      // a two-finger horizontal sweep that wasn't a pinch changes view
+      if (pinch && Math.abs(pinch.travel || 0) > 70 && (pinch.dz || 0) < 60 && onSweep) {
+        onSweep((pinch.travel || 0) < 0 ? 1 : -1);
       }
       active.delete(e.pointerId);
       if (active.size < 2) pinch = null;
@@ -667,11 +702,12 @@ const MapView = (() => {
     const el = document.getElementById("mapStatus");
     if (!el) return;
     if (!total) { el.textContent = ""; return; }
+    const n = links.length;
     el.textContent = withVec === total && total > 0
-      ? `${links.length} connections from meaning · ${total} khayals`
+      ? `${total} khayals, linked ${n} time${n === 1 ? "" : "s"} by what they mean`
       : withVec > 0
-      ? `${links.length} connections · ${withVec}/${total} khayals understood by meaning`
-      : `${links.length} connections from shared words. Add a key in Settings for meaning-based links.`;
+      ? `${n} link${n === 1 ? "" : "s"} so far — still reading ${total - withVec} of your ${total} khayals`
+      : `Linking by shared words only, so most khayals stay apart. Add a key in Settings to link by meaning.`;
   }
 
   window.addEventListener("resize", () => { if (running) { resize(); layout(); } });
@@ -688,7 +724,8 @@ const MapView = (() => {
 
   return { start, stop, rebuild: start, updateStatus, isRunning: () => running,
     focus, positions, linkCount: () => links.length, nodeCount: () => nodes.length,
-    zoomBy, resetView, setSpin: (v) => { autoSpin = v; } };
+    zoomBy, resetView, setSpin: (v) => { autoSpin = v; },
+    onTwoFingerSweep: (fn) => { onSweep = fn; } };
 })();
 
 /* ================= ask (RAG over your own khayals) ================= */

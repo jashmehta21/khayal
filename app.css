@@ -21,8 +21,10 @@
   --green: #2f9e6b;
   --green-soft: #e4f4ec;
   /* second tier colour — warm ochre, clearly distinct from the coral of Core */
-  --high: #2f6fe0;
-  --high-soft: #e7eefc;
+  --core: #c8961c;
+  --core-soft: #f9f0d9;
+  --high: #8b95a1;
+  --high-soft: #eef1f5;
 
   --r-card: 24px;
   --r-inner: 16px;
@@ -156,9 +158,9 @@ h3 { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.02em; }
 .chip.active { background: var(--dark); color: #fff; border-color: var(--dark); }
 /* picking a tier previews its colour */
 .tier-chip.active[data-tier="2"],
-.filter-chip.active[data-filter="core"] { background: var(--accent); border-color: var(--accent); }
+.filter-chip.active[data-filter="core"] { background: linear-gradient(135deg,#e0b849,#b8860b); border-color: transparent; color: #fff; }
 .tier-chip.active[data-tier="1"],
-.filter-chip.active[data-filter="high"] { background: var(--high); border-color: var(--high); }
+.filter-chip.active[data-filter="high"] { background: linear-gradient(135deg,#c3ccd6,#7d8894); border-color: transparent; color: #fff; }
 .chip-accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .chip-row.scroll-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 10px 0 14px; }
@@ -408,7 +410,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .thought-card:active { transform: scale(0.985); }
 /* Core and High get their own colour AND a tinted card, so the tier reads at a
    glance instead of hiding in a hairline */
-.thought-card.tier-2 { border-left-color: var(--accent); background: var(--accent-soft); }
+.thought-card.tier-2 { border-left-color: var(--core); background: var(--core-soft); }
 .thought-card.tier-1 { border-left-color: var(--high); background: var(--high-soft); }
 .thought-card.fading { opacity: 0.55; }
 .thought-title {
@@ -426,8 +428,8 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
   font-weight: 800; letter-spacing: 0.06em; font-size: 0.66rem;
   padding: 3px 8px; border-radius: var(--pill); color: #fff;
 }
-.tier-badge.t2 { background: var(--accent); }
-.tier-badge.t1 { background: var(--high); }
+.tier-badge.t2 { background: linear-gradient(135deg,#e6c25c,#b8860b); }
+.tier-badge.t1 { background: linear-gradient(135deg,#cdd5de,#79838f); }
 .fade-tag { color: var(--accent); }
 
 .day-head {
@@ -544,8 +546,8 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .map-legend { display: flex; gap: 12px; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
 .map-legend span { display: flex; align-items: center; gap: 5px; }
 .map-legend i { width: 8px; height: 8px; border-radius: 50%; display: block; }
-.dot-core { background: var(--accent); }
-.dot-high { background: var(--high); }
+.dot-core { background: linear-gradient(135deg,#e6c25c,#b8860b); }
+.dot-high { background: linear-gradient(135deg,#cdd5de,#79838f); }
 .dot-reg { background: var(--faint); }
 
 /* ---------- related khayals ---------- */
@@ -981,3 +983,47 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
   position: absolute; top: 0; bottom: 0; width: 26px; z-index: 3;
 }
 .swipe-edge.left { left: 0; } .swipe-edge.right { right: 0; }
+/* the page must not scroll underneath an open sheet */
+body.locked { overflow: hidden; position: fixed; width: 100%; }
+.sheet-backdrop { overscroll-behavior: contain; }
+.chat-log { overscroll-behavior: contain; }
+
+/* the map fits its section — nothing to scroll past */
+#mapView { display: flex; flex-direction: column; gap: 8px; }
+#mapView .map-wrap { flex: 1 1 auto; height: auto; min-height: 260px; }
+.map-foot { flex: none; margin-top: 0; }
+#mapStatus { flex: none; margin: 0; text-align: center; }
+
+/* to-do rows: trailing swipe deletes, leading swipe completes (iOS convention) */
+.todo-row { position: relative; overflow: hidden; border-radius: var(--r-inner); margin-bottom: 8px; }
+.todo-row .swipe-back {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 20px;
+  font-family: var(--font); font-weight: 800; font-size: 0.85rem; color: #fff;
+  background: linear-gradient(90deg, var(--green) 50%, var(--accent) 50%);
+}
+.todo-row .todo-item { margin-bottom: 0; will-change: transform; }
+.todo-row.swiping .todo-item { transition: none; }
+.todo-row .todo-item { transition: transform 0.28s var(--ease); }
+
+.link-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--card); border-radius: var(--r-inner); padding: 14px 16px;
+  margin-bottom: 14px; cursor: pointer; border: none; width: 100%;
+  font-family: var(--font); font-size: 0.92rem; font-weight: 700; color: var(--ink);
+}
+.link-row span.hint { color: var(--muted); font-weight: 500; font-size: 0.82rem; }
+.link-row:active { transform: scale(0.99); }
+
+/* review controls */
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; }
+.setting-row + .setting-row { border-top: 1px solid var(--line); }
+.setting-row .k { font-size: 0.9rem; font-weight: 700; }
+.setting-row .k em { display: block; font-style: normal; font-weight: 500; color: var(--muted); font-size: 0.78rem; margin-top: 3px; }
+.stepper { display: flex; align-items: center; gap: 8px; flex: none; }
+.stepper button {
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card-2); color: var(--ink); font-family: var(--font);
+  font-size: 1rem; font-weight: 800; cursor: pointer;
+}
+.stepper .val { min-width: 54px; text-align: center; font-weight: 800; font-size: 0.88rem; }

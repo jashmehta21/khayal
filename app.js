@@ -147,7 +147,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v21";                      // shown in Settings so we can confirm what's running
+const BUILD = "v22";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a dictation editor. Turn the raw speech below into what the speaker MEANT to write — the way a great human transcriptionist would.
 
@@ -501,12 +501,23 @@ function uid() {
 }
 
 /* ================= shared helpers ================= */
+/* Review is tunable: how long a new khayal rests, how long before it fades,
+   how fast kept ones come back, and whether Core memories return at all. */
+const rv = (k, d) => { const v = settings.review && settings.review[k]; return v === undefined ? d : v; };
+const graceDays = () => rv("grace", NEW_THOUGHT_GRACE);
+const fadeDays = () => rv("fade", FADE_DAYS);
+const reviewBatch = () => rv("batch", 20);
+const pace = () => rv("pace", 3);          // 1 slow … 5 brisk
+const coreResurfaces = () => rv("core", true);
+
 function touchTime(t) { return Math.max(t.updatedAt || 0, t.lastReviewedAt || 0, t.createdAt); }
-function isFading(t) { return t.tier === 0 && now() - touchTime(t) > FADE_DAYS * DAY; }
+function isFading(t) { return t.tier === 0 && now() - touchTime(t) > fadeDays() * DAY; }
 function isDue(t) {
   if (t.snoozedUntil && t.snoozedUntil > now()) return false;
-  const mult = t.tier === 2 ? 2 : 1;
-  if (!t.lastReviewedAt) return now() - t.createdAt > NEW_THOUGHT_GRACE * DAY;
+  if (t.tier === 2 && !coreResurfaces()) return false;
+  const speed = 6 / (pace() + 1);                 // pace 5 → 1.0×, pace 1 → 3×
+  const mult = (t.tier === 2 ? 2 : 1) * speed;
+  if (!t.lastReviewedAt) return now() - t.createdAt > graceDays() * DAY;
   const interval = REVIEW_INTERVALS[Math.min(t.reviewCount || 0, REVIEW_INTERVALS.length - 1)];
   return now() - t.lastReviewedAt > interval * mult * DAY;
 }
@@ -568,15 +579,35 @@ function countUp(el, to, dur = 750, suffix = "") {
 /* Show/hide an overlay. The .open class is added on the next frame so the
    transition has a start state to animate from — and again on a timer, so if
    animation frames never arrive the layer still opens. */
-function showLayer(el) {
+/* Sheets lock the page behind them, so scrolling inside a sheet can never
+   scroll the screen underneath. The scroll position is restored on close. */
+let lockedScrollY = 0;
+let openLayers = 0;
+function lockScroll() {
+  if (openLayers++ > 0) return;
+  lockedScrollY = window.scrollY;
+  document.body.style.top = `-${lockedScrollY}px`;
+  document.body.classList.add("locked");
+}
+function unlockScroll() {
+  if (openLayers > 0) openLayers--;
+  if (openLayers > 0) return;
+  document.body.classList.remove("locked");
+  document.body.style.top = "";
+  window.scrollTo(0, lockedScrollY);
+}
+
+function showLayer(el, { lock = false } = {}) {
   if (!el) return;
+  if (lock && el.hidden) lockScroll();
   el.hidden = false;
   requestAnimationFrame(() => el.classList.add("open"));
   clearTimeout(el._openTimer);
   el._openTimer = setTimeout(() => el.classList.add("open"), 60);
 }
-function hideLayer(el) {
+function hideLayer(el, { lock = false } = {}) {
   if (!el) return;
+  if (lock && !el.hidden) unlockScroll();
   clearTimeout(el._openTimer);
   el.classList.remove("open");
   el.hidden = true;
@@ -973,17 +1004,13 @@ async function addTodo(text, dueAt = null) {
   return t;
 }
 
-$("quickAddBtn").addEventListener("click", quickAdd);
-$("quickAdd").addEventListener("keydown", (e) => { if (e.key === "Enter") quickAdd(); });
-async function quickAdd() {
-  const input = $("quickAdd");
-  const text = input.value.trim();
-  if (!text) { input.focus(); return; }
-  input.value = "";
-  buzz(12);
-  await addTodo(text, null);
-  renderTodos();
-}
+/* adding lives in Capture, so there is one place to create things */
+$("goCapture").addEventListener("click", () => {
+  buzz(8);
+  showScreen("capture");
+  setMode("todo");
+  setTimeout(() => $("transcript").focus(), 250);
+});
 
 async function toggleTodo(t) {
   t.done = !t.done;
@@ -1036,7 +1063,9 @@ function todoSections() {
 
 function todoItemHTML(t) {
   const due = dueLabel(t);
-  return `<div class="todo-item${t.done ? " done" : ""}${due && due.cls === "past" ? " overdue" : ""}" data-id="${t.id}">
+  return `<div class="todo-row" data-id="${t.id}">
+  <div class="swipe-back"><span>${t.done ? "Undo" : "Done"}</span><span>Delete</span></div>
+  <div class="todo-item${t.done ? " done" : ""}${due && due.cls === "past" ? " overdue" : ""}" data-id="${t.id}">
     <button class="tcheck" aria-label="${t.done ? "Mark as not done" : "Mark as done"}" role="checkbox" aria-checked="${t.done}">
       <svg viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5"/></svg>
     </button>
@@ -1044,7 +1073,46 @@ function todoItemHTML(t) {
       <span class="ttext">${esc(t.text)}</span>
       ${due || t.dueAt ? `<div class="tmeta">${due ? `<span class="tdue ${due.cls}">${esc(due.text)}</span>` : ""}${t.dueAt && !t.done ? '<span class="tbell">🔔</span>' : ""}</div>` : ""}
     </div>
-  </div>`;
+  </div></div>`;
+}
+
+/* Trailing swipe deletes, leading swipe completes — the iOS convention. Tapping
+   the row still opens the sheet, so nothing is gesture-only. */
+function bindSwipe(row) {
+  const card = row.querySelector(".todo-item");
+  let x0 = 0, dx = 0, active = false;
+  const THRESH = 92;
+  row.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    x0 = e.touches[0].clientX; dx = 0; active = true;
+    row.classList.add("swiping");
+  }, { passive: true });
+  row.addEventListener("touchmove", (e) => {
+    if (!active) return;
+    dx = e.touches[0].clientX - x0;
+    card.style.transform = `translateX(${Math.max(-150, Math.min(150, dx))}px)`;
+  }, { passive: true });
+  row.addEventListener("touchend", async () => {
+    if (!active) return;
+    active = false;
+    row.classList.remove("swiping");
+    card.style.transform = "";
+    const t = todos.find((x) => x.id === row.dataset.id);
+    if (!t) return;
+    if (dx <= -THRESH) {
+      const backup = { ...t };
+      buzz(18);
+      await deleteTodo(t);
+      renderTodos();
+      toast("Deleted — tap to undo", async () => {
+        todos.push(backup); await dbPut("todos", backup);
+        renderTodos(); updateBadges(); scheduleReminders(); toast("Restored");
+      });
+    } else if (dx >= THRESH) {
+      await toggleTodo(t);
+      renderTodos();
+    }
+  }, { passive: true });
 }
 
 function renderTodos() {
@@ -1072,6 +1140,7 @@ function renderTodos() {
     </div>`).join("");
 
   staggerIn(list, ".todo-item");
+  list.querySelectorAll(".todo-row").forEach(bindSwipe);
 
   list.querySelectorAll(".tcheck").forEach((btn) =>
     btn.addEventListener("click", async (e) => {
@@ -1140,7 +1209,7 @@ function openTodo(id) {
     $("tDueTime").value = new Date(t.dueAt).toTimeString().slice(0, 5);
   } else { $("tDueDate").value = ""; $("tDueTime").value = "09:00"; }
   $("todoIcs").hidden = !has;
-  showLayer($("todoSheetBackdrop"));
+  showLayer($("todoSheetBackdrop"), { lock: true });
 }
 document.querySelectorAll(".tdue-chip").forEach((c) =>
   c.addEventListener("click", () => {
@@ -1157,7 +1226,7 @@ document.querySelectorAll(".tdue-chip").forEach((c) =>
     }
   })
 );
-function closeTodoSheet() { hideLayer($("todoSheetBackdrop")); todoId = null; }
+function closeTodoSheet() { hideLayer($("todoSheetBackdrop"), { lock: true }); todoId = null; }
 $("todoClose").addEventListener("click", closeTodoSheet);
 $("todoSheetBackdrop").addEventListener("click", (e) => {
   if (e.target === $("todoSheetBackdrop")) closeTodoSheet();
@@ -1822,7 +1891,7 @@ function openDetail(id, { push = false } = {}) {
   $("detailMeta").textContent = `Created ${relTime(t.createdAt)} · reviewed ${t.reviewCount || 0}×`;
   updateTierChips();
   renderRelated(t);
-  showLayer($("sheetBackdrop"));
+  showLayer($("sheetBackdrop"), { lock: true });
 }
 
 /* the connections, shown where they're actually useful: on the khayal itself */
@@ -1850,7 +1919,7 @@ document.querySelectorAll(".tier-chip").forEach((c) =>
   c.addEventListener("click", () => { detailTier = Number(c.dataset.tier); buzz(8); updateTierChips(); }));
 $("detailClose").addEventListener("click", closeDetail);
 $("sheetBackdrop").addEventListener("click", (e) => { if (e.target === $("sheetBackdrop")) closeDetail(); });
-function closeDetail() { hideLayer($("sheetBackdrop")); detailId = null; detailTrail = []; }
+function closeDetail() { hideLayer($("sheetBackdrop"), { lock: true }); detailId = null; detailTrail = []; }
 $("detailBack").addEventListener("click", () => {
   const prev = detailTrail.pop();
   buzz(8);
@@ -1933,12 +2002,14 @@ function startReview() {
     if (fa !== fb) return fa - fb;
     return touchTime(a) - touchTime(b);
   });
+  reviewQueue = reviewQueue.slice(0, reviewBatch());
   reviewIndex = 0;
+  renderReviewSettings();
   const fadingCount = thoughts.filter(isFading).length;
   const banner = $("fadingBanner");
   if (fadingCount > 0) {
     banner.hidden = false;
-    banner.innerHTML = `<b>${fadingCount}</b> khayal${fadingCount > 1 ? "s are" : " is"} fading — untouched for ${FADE_DAYS}+ days. They come first: keep them or let them go.`;
+    banner.innerHTML = `<b>${fadingCount}</b> khayal${fadingCount > 1 ? "s are" : " is"} fading — untouched for ${fadeDays()}+ days. They come first: keep them or let them go.`;
   } else banner.hidden = true;
   renderReviewCard();
 }
@@ -1986,6 +2057,44 @@ function renderReviewCard() {
   });
 }
 function nextReview() { reviewIndex++; renderReviewCard(); }
+
+/* ---- review controls ---- */
+const PACE_WORDS = ["", "Very relaxed", "Relaxed", "Balanced", "Frequent", "Very frequent"];
+function renderReviewSettings() {
+  const due = thoughts.filter(isDue).length;
+  $("reviewExplain").innerHTML =
+    `Khayals come back on a widening schedule — a few days, then a week, then longer each time you keep one. ` +
+    `Anything you don't touch for <b>${fadeDays()} days</b> is flagged as fading. ` +
+    `Right now <b>${due}</b> ${due === 1 ? "is" : "are"} due, shown <b>${reviewBatch()}</b> at a time.`;
+  $("valGrace").textContent = graceDays() + (graceDays() === 1 ? " day" : " days");
+  $("valFade").textContent = fadeDays() + " days";
+  $("valBatch").textContent = reviewBatch();
+  $("valPace").textContent = PACE_WORDS[pace()];
+  $("coreResurfaceToggle").checked = coreResurfaces();
+}
+function setReview(k, v) {
+  settings.review = { ...(settings.review || {}), [k]: v };
+  saveSettings();
+  startReview();
+  updateBadges();
+}
+$("reviewSettingsToggle").addEventListener("click", () => {
+  const box = $("reviewSettings");
+  box.hidden = !box.hidden;
+  $("reviewSettingsToggle").textContent = box.hidden ? "Adjust" : "Done";
+  buzz(8);
+});
+document.querySelectorAll(".stepper button").forEach((b) =>
+  b.addEventListener("click", () => {
+    const k = b.dataset.k, d = Number(b.dataset.d);
+    buzz(6);
+    const limits = { grace: [0, 14], fade: [7, 180], batch: [5, 100], pace: [1, 5] };
+    const cur = { grace: graceDays(), fade: fadeDays(), batch: reviewBatch(), pace: pace() }[k];
+    const [lo, hi] = limits[k];
+    setReview(k, Math.max(lo, Math.min(hi, cur + d)));
+  })
+);
+$("coreResurfaceToggle").addEventListener("change", (e) => setReview("core", e.target.checked));
 
 /* ================= badges ================= */
 function updateBadges() {
@@ -2365,21 +2474,13 @@ $("mapZoomIn").addEventListener("click", () => { buzz(6); MapView.zoomBy(1.25); 
 $("mapZoomOut").addEventListener("click", () => { buzz(6); MapView.zoomBy(0.8); });
 $("mapReset").addEventListener("click", () => { buzz(8); MapView.resetView(); });
 
-/* the canvas eats horizontal drags, so the screen edges stay reserved for
-   swiping between Memories, Map and Insights */
-document.querySelectorAll(".swipe-edge").forEach((edge) => {
-  let sx = 0, sy = 0;
-  edge.addEventListener("touchstart", (e) => {
-    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-  }, { passive: true });
-  edge.addEventListener("touchend", (e) => {
-    const dx = e.changedTouches[0].clientX - sx;
-    const dy = e.changedTouches[0].clientY - sy;
-    if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy)) return;
-    const i = VIEW_ORDER.indexOf(settings.view);
-    const next = VIEW_ORDER[i + (dx < 0 ? 1 : -1)];
-    if (next) gotoView(next);
-  }, { passive: true });
+/* The canvas owns single-finger drags, so on the map a two-finger sweep is
+   what moves between views. Edge strips are avoided deliberately: iOS reserves
+   the screen edges for its own back and Home gestures. */
+MapView.onTwoFingerSweep((dir) => {
+  const i = VIEW_ORDER.indexOf(settings.view);
+  const next = VIEW_ORDER[i + dir];
+  if (next) gotoView(next);
 });
 $("ctaSettings").addEventListener("click", () => {
   showScreen("settings");
@@ -2399,25 +2500,24 @@ $("mapRelink").addEventListener("click", async () => {
 
 /* ================= ask ================= */
 function openChat() {
-  showLayer($("chatBackdrop"));
+  showLayer($("chatBackdrop"), { lock: true });
   $("chatSub").textContent = smartKey()
     ? "Answers come only from what you've written."
     : "Add a free key in Settings to talk. Without one I'll still find the closest khayals.";
   if (!chatHistory.length) renderChat();
   setTimeout(() => $("chatInput").focus(), 250);
 }
-function closeChat() { hideLayer($("chatBackdrop")); }
+function closeChat() { hideLayer($("chatBackdrop"), { lock: true }); }
 $("askBtn").addEventListener("click", () => { buzz(8); openChat(); });
 $("chatClose").addEventListener("click", closeChat);
 $("chatNew").addEventListener("click", () => {
   chatHistory = [];
-  renderChat();
+  renderChat({ toTop: true });   // a fresh chat starts at the top, not mid-scroll
   buzz(8);
-  $("chatInput").focus();
 });
 $("chatBackdrop").addEventListener("click", (e) => { if (e.target === $("chatBackdrop")) closeChat(); });
 
-function renderChat() {
+function renderChat({ toTop = false } = {}) {
   const log = $("chatLog");
   if (!chatHistory.length) {
     const seeds = ["What have I been thinking about lately?",
@@ -2442,7 +2542,7 @@ function renderChat() {
   staggerIn(log, ".msg", 0, 0);
   log.querySelectorAll(".cite").forEach((el) =>
     el.addEventListener("click", () => { closeChat(); openDetail(el.dataset.id); }));
-  log.scrollTop = log.scrollHeight;
+  log.scrollTop = toTop ? 0 : log.scrollHeight;
 }
 
 let chatBusy = false;
