@@ -147,7 +147,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v19";                      // shown in Settings so we can confirm what's running
+const BUILD = "v20";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
 
@@ -213,6 +213,25 @@ async function chatComplete(prompt, { temperature = 0.2, timeout = SMART_TIMEOUT
 
 async function smartCleanup(text) {
   return chatComplete(CLEANUP_PROMPT + text);
+}
+
+/* A real title, not the first clause: the model reads the whole khayal and
+   names what it is actually about. Falls back to the local generator. */
+const TITLE_PROMPT = `Give this personal note a short title: what it is actually about, not its first words.
+
+Rules:
+- 3 to 7 words. No trailing full stop. No quotes around it.
+- Written the way the person would say it, in their own words where possible.
+- If the note mixes Hindi and English, keep Hindi words in English letters.
+- Capture the point, not the preamble. "Today I wanna basically note down that I need to fix my sleep" is titled "Fixing my sleep", not "Today I wanna basically note down".
+- Reply with the title alone.
+
+Note:
+`;
+
+async function aiTitle(text) {
+  const out = await chatComplete(TITLE_PROMPT + text, { temperature: 0.3, timeout: 12000 });
+  return out.replace(/^["'\s]+|["'.\s]+$/g, "").split("\n")[0].slice(0, 70);
 }
 
 /* ================= cloud transcription =================
@@ -631,15 +650,12 @@ function setMode(mode) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recog = null, recording = false, restartTimer = null;
 
+/* No language picker any more. The device engine uses en-IN, which copes with
+   English and Hinglish, and cloud transcription detects the language itself. */
 function setLang(lang) {
-  settings.lang = lang;
+  settings.lang = lang || "en-IN";
   saveSettings();
-  document.querySelectorAll(".lang-btn").forEach((c) => c.classList.toggle("active", c.dataset.lang === lang));
-  if (recording) { stopRecording(); startRecording(); }
 }
-document.querySelectorAll(".lang-btn").forEach((c) =>
-  c.addEventListener("click", () => { buzz(8); setLang(c.dataset.lang); })
-);
 
 function buildRecognizer() {
   const r = new SR();
@@ -773,9 +789,7 @@ function updateMicUI() {
   btn.classList.toggle("recording", recording);
   btn.setAttribute("aria-label", recording ? "Stop recording" : "Start recording");
   $("wave").hidden = !recording;
-  $("micHint").textContent = recording
-    ? (settings.lang === "hi-IN" ? "Sun raha hoon… bolte jao" : "Listening… speak freely")
-    : "Tap to speak";
+  $("micHint").textContent = recording ? "Listening… speak freely" : "Tap to speak";
 }
 $("micBtn").addEventListener("click", () =>
   recording ? stopRecording({ cleanup: true }) : startRecording());
@@ -893,10 +907,18 @@ async function saveCapture() {
     updateTodayStat();
     updateBadges();
     toast("✦ Khayal saved");
-    // give it a meaning vector in the background so the map stays current
+    // in the background: a proper title, then a meaning vector for the map
+    if (smartEnabled()) {
+      aiTitle(t.text).then(async (title) => {
+        if (!title || t.titleEdited) return;
+        t.title = title;
+        await dbPut("thoughts", t);
+        if ($("screen-thoughts").classList.contains("active")) refreshThoughts();
+      }).catch(() => {});
+    }
     if (smartKey()) {
       embedOne((t.title ? t.title + ". " : "") + t.text)
-        .then(async (vec) => { t.vec = vec; t.vecModel = EMBED_MODEL; await dbPut("thoughts", t); })
+        .then(async (vec) => { t.vec = vec; t.vecModel = embedModel(); await dbPut("thoughts", t); })
         .catch(() => {});
     }
   }
@@ -1292,10 +1314,37 @@ function highlightHTML(raw, tokens) {
   }
   return out + esc(raw.slice(last));
 }
+/* Meaning-based search: literal matches show instantly, then khayals that mean
+   the same thing are folded in once the query has been embedded. */
+let semanticHits = new Map();   // id -> score, for the current query
+let semanticFor = "";
+let searchTimer = null;
+
+async function runSemanticSearch(q) {
+  if (!smartKey() || !thoughts.some((t) => t.vec) || q.trim().length < 3) return;
+  try {
+    const qv = await embedOne(q);
+    const hits = new Map();
+    for (const t of thoughts) {
+      if (!t.vec) continue;
+      const s = cosine(qv, t.vec);
+      if (s >= 0.45) hits.set(t.id, s);
+    }
+    if (searchQuery.trim() !== q.trim()) return; // the query moved on
+    semanticHits = hits;
+    semanticFor = q.trim();
+    renderList();
+  } catch (_) {}
+}
+
 $("searchBox").addEventListener("input", (e) => {
   searchQuery = e.target.value;
   $("searchClear").hidden = !searchQuery;
+  if (!searchQuery.trim()) { semanticHits = new Map(); semanticFor = ""; }
   renderList();
+  clearTimeout(searchTimer);
+  const q = searchQuery;
+  searchTimer = setTimeout(() => runSemanticSearch(q), 450);
 });
 $("searchClear").addEventListener("click", () => {
   searchQuery = ""; $("searchBox").value = ""; $("searchClear").hidden = true;
@@ -1348,7 +1397,16 @@ function renderList() {
   if (currentFilter === "high") items = items.filter((t) => t.tier === 1);
   if (currentFilter === "fading") items = items.filter(isFading);
   if (selectedDay) items = items.filter((t) => dayKey(t.createdAt) === selectedDay);
-  if (tokens.length) items = items.filter((t) => matchesSearch(t, tokens));
+  if (tokens.length) {
+    const usable = semanticFor === searchQuery.trim() ? semanticHits : new Map();
+    items = items.filter((t) => matchesSearch(t, tokens) || usable.has(t.id));
+    // literal matches first, then by how closely the meaning matches
+    items.sort((a, b) => {
+      const la = matchesSearch(a, tokens) ? 1 : 0, lb = matchesSearch(b, tokens) ? 1 : 0;
+      if (la !== lb) return lb - la;
+      return (usable.get(b.id) || 0) - (usable.get(a.id) || 0) || b.createdAt - a.createdAt;
+    });
+  }
 
   const core = thoughts.filter((t) => t.tier === 2).length;
   const high = thoughts.filter((t) => t.tier === 1).length;
@@ -1691,19 +1749,49 @@ function refreshThoughts() {
   else { renderDateBar(); renderList(); }
   moveAllThumbs();
 }
+const VIEW_ORDER = ["list", "map", "insights"];
+function gotoView(name) {
+  if (!VIEW_ORDER.includes(name)) return;
+  settings.view = name;
+  saveSettings();
+  buzz(8);
+  refreshThoughts();
+}
 document.querySelectorAll(".view-chip").forEach((c) =>
-  c.addEventListener("click", () => {
-    settings.view = c.dataset.view;
-    saveSettings();
-    buzz(8);
-    refreshThoughts();
-  })
-);
+  c.addEventListener("click", () => gotoView(c.dataset.view)));
+
+/* swipe sideways to move between Memories, Map and Insights */
+(() => {
+  const screen = $("screen-thoughts");
+  let sx = 0, sy = 0, tracking = false;
+  screen.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    // the map has its own drag, and horizontal scrollers must keep their gesture
+    if (e.target.closest("#mapCanvas, .heat-scroll, .scroll-row, textarea, input")) { tracking = false; return; }
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking = true;
+  }, { passive: true });
+  screen.addEventListener("touchend", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) return; // mostly vertical = scrolling
+    const i = VIEW_ORDER.indexOf(settings.view === "insights" ? "insights" : settings.view === "map" ? "map" : "list");
+    const next = VIEW_ORDER[i + (dx < 0 ? 1 : -1)];
+    if (next) gotoView(next);
+  }, { passive: true });
+})();
 
 /* ================= khayal detail sheet ================= */
-function openDetail(id) {
+/* Following a connected khayal replaces the sheet's contents rather than
+   stacking another one on top, with a Back trail so you can retrace. */
+let detailTrail = [];
+function openDetail(id, { push = false } = {}) {
   const t = thoughts.find((x) => x.id === id);
   if (!t) return;
+  if (push && detailId && detailId !== id) detailTrail.push(detailId);
+  else if (!push) detailTrail = [];
+  $("detailBack").hidden = detailTrail.length === 0;
   detailId = id;
   detailTier = t.tier;
   $("detailTitle").value = t.title || generateTitle(t.text);
@@ -1729,7 +1817,7 @@ function renderRelated(t) {
       </span>
     </button>`).join("");
   list.querySelectorAll(".related-item").forEach((el) =>
-    el.addEventListener("click", () => { buzz(8); openDetail(el.dataset.id); }));
+    el.addEventListener("click", () => { buzz(8); openDetail(el.dataset.id, { push: true }); }));
 }
 function updateTierChips() {
   document.querySelectorAll(".tier-chip").forEach((c) =>
@@ -1739,7 +1827,13 @@ document.querySelectorAll(".tier-chip").forEach((c) =>
   c.addEventListener("click", () => { detailTier = Number(c.dataset.tier); buzz(8); updateTierChips(); }));
 $("detailClose").addEventListener("click", closeDetail);
 $("sheetBackdrop").addEventListener("click", (e) => { if (e.target === $("sheetBackdrop")) closeDetail(); });
-function closeDetail() { hideLayer($("sheetBackdrop")); detailId = null; }
+function closeDetail() { hideLayer($("sheetBackdrop")); detailId = null; detailTrail = []; }
+$("detailBack").addEventListener("click", () => {
+  const prev = detailTrail.pop();
+  buzz(8);
+  if (prev) { const keep = detailTrail.slice(); openDetail(prev); detailTrail = keep; $("detailBack").hidden = !detailTrail.length; }
+  else closeDetail();
+});
 
 $("detailPolish").addEventListener("click", () => {
   const ta = $("detailText");
@@ -1752,12 +1846,21 @@ $("detailCopy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("detailText").value); toast("Copied"); }
   catch { toast("Couldn't copy"); }
 });
-/* regenerate on demand, and hand the title back to the generator if it's cleared */
-$("retitleBtn").addEventListener("click", () => {
-  const fresh = generateTitle($("detailText").value);
-  $("detailTitle").value = fresh;
+/* regenerate on demand — the model when available, local rules otherwise */
+$("retitleBtn").addEventListener("click", async () => {
+  const body = $("detailText").value;
+  if (!body.trim()) { toast("Nothing to title"); return; }
   buzz(10);
-  toast(fresh ? "Title regenerated" : "Nothing to title");
+  const btn = $("retitleBtn");
+  if (smartEnabled()) {
+    btn.textContent = "…"; btn.disabled = true;
+    try { $("detailTitle").value = await aiTitle(body); toast("Title regenerated"); }
+    catch (e) { $("detailTitle").value = generateTitle(body); toast(e.message + " — used offline title"); }
+    finally { btn.textContent = "↻ Regenerate"; btn.disabled = false; }
+  } else {
+    $("detailTitle").value = generateTitle(body);
+    toast("Title regenerated");
+  }
 });
 
 $("detailSave").addEventListener("click", async () => {
@@ -2230,6 +2333,12 @@ function openChat() {
 function closeChat() { hideLayer($("chatBackdrop")); }
 $("askBtn").addEventListener("click", () => { buzz(8); openChat(); });
 $("chatClose").addEventListener("click", closeChat);
+$("chatNew").addEventListener("click", () => {
+  chatHistory = [];
+  renderChat();
+  buzz(8);
+  $("chatInput").focus();
+});
 $("chatBackdrop").addEventListener("click", (e) => { if (e.target === $("chatBackdrop")) closeChat(); });
 
 function renderChat() {

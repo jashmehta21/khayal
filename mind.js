@@ -127,7 +127,8 @@ const EMBED_MIN = 0.6;
    ("3-D printing business" ↔ "stop optimising the tool"), and showing nothing
    is better than showing a wrong connection */
 const LEX_MIN = 0.15;
-const CHAT_CONTEXT = 8;    // khayals handed to the model when answering
+const CHAT_CONTEXT = 6;    // khayals handed to the model when answering
+const RETRIEVE_FLOOR = 0.2; // below this a khayal isn't worth putting in front of the model
 
 /* ================= local fallback: bag-of-words vectors ================= */
 const STOP = new Set(("a an the and or but if then than that this these those of in on at to for with from by as is are was were be been being it its i me my we our you your he she they them their " +
@@ -636,7 +637,9 @@ async function retrieveFor(question, k = CHAT_CONTEXT) {
     return { t, s };
   });
   scored.sort((a, b) => b.s - a.s);
-  return scored.filter((x) => x.s > 0.05).slice(0, k);
+  const top = scored[0] ? scored[0].s : 0;
+  // keep only what's genuinely close to the question, and near the best match
+  return scored.filter((x) => x.s >= RETRIEVE_FLOOR && x.s >= top * 0.55).slice(0, k);
 }
 
 const ASK_PROMPT = `You are the user's own thinking partner. You can see only the khayals (personal notes) listed below — they are this person's own thoughts, written by them.
@@ -668,5 +671,10 @@ async function askKhayals(question) {
     `${ASK_PROMPT}\n\nKHAYALS:\n${context}\n\nQUESTION: ${question}`,
     { temperature: 0.4, timeout: 25000 }
   );
-  return { answer: text || "I couldn't put that into words.", sources: hits.map((h) => h.t) };
+  // only surface the khayals the answer actually leant on, not everything retrieved
+  const cited = new Set([...String(text).matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
+  const sources = cited.size
+    ? hits.filter((_, i) => cited.has(i + 1)).map((h) => h.t)
+    : hits.slice(0, 2).map((h) => h.t);
+  return { answer: text || "I couldn't put that into words.", sources };
 }

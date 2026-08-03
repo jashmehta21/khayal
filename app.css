@@ -184,11 +184,22 @@ h3 { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.02em; }
 
 /* ---------- capture ---------- */
 /* fills the screen instead of stranding the mic above a void */
-#screen-capture.active {
-  display: flex; flex-direction: column;
-  min-height: calc(100dvh - env(safe-area-inset-top, 0px) - var(--tabbar-total) - 46px);
+/* The capture screen fills whatever the app's padded content box actually is,
+   rather than trusting 100dvh, which disagrees with the real viewport in some
+   browsers. The note card then absorbs the slack and scrolls inside itself, so
+   the mic and Save button can never end up under the tab bar. */
+#app { display: flex; flex-direction: column; }
+#app > .screen.active { flex: 1 1 auto; min-height: 0; }
+#screen-capture.active { display: flex; flex-direction: column; }
+/* the card takes the slack and scrolls inside itself, so the mic and the save
+   button are always reachable without scrolling the page */
+.compose-card {
+  padding-bottom: 16px; display: flex; flex-direction: column;
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
 }
-.compose-card { padding-bottom: 16px; display: flex; flex-direction: column; flex: 1; min-height: 150px; }
+.compose-card #transcript { min-height: 92px; }
+.mic-zone { padding: 6px 0 2px; gap: 8px; }
+.mic-btn { width: 72px; height: 72px; }
 .compose-card .transcript-wrap { flex: 1; display: flex; flex-direction: column; }
 .compose-card #transcript { flex: 1; }
 .mic-zone { flex: none; }
@@ -829,6 +840,22 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .review-card .thought-title {
   font-weight: 500; color: var(--ink-soft); font-size: 1rem;
 }
+
+/* the sheet must never squeeze its own content into slivers */
+#detailText, #todoText { min-height: 118px; }
+#detailTitle {
+  min-height: 56px; resize: none; line-height: 1.4;
+  background: var(--card); border-radius: var(--r-inner); padding: 13px 14px;
+  font-weight: 700; font-size: 1rem; letter-spacing: -0.02em;
+}
+.back-btn {
+  align-self: flex-start; border: none; background: var(--card-2);
+  border-radius: var(--pill); padding: 7px 14px; margin-bottom: 2px;
+  font-family: var(--font); font-size: 0.82rem; font-weight: 700; color: var(--ink);
+  cursor: pointer; transition: transform 0.16s var(--spring);
+}
+.back-btn:active { transform: scale(0.94); }
+.chat-head-btns { display: flex; align-items: center; gap: 8px; flex: none; }
 
 .sheet-tools { display: flex; gap: 8px; justify-content: flex-end; }
 .detail-meta { color: var(--faint); font-size: 0.76rem; text-align: center; font-weight: 700; margin-top: 4px; }
