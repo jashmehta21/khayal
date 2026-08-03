@@ -990,7 +990,7 @@ body.locked { overflow: hidden; position: fixed; width: 100%; }
 
 /* the map fits its section — nothing to scroll past */
 #mapView { display: flex; flex-direction: column; gap: 8px; }
-#mapView .map-wrap { flex: 1 1 auto; height: auto; min-height: 260px; }
+#mapView .map-wrap { flex: 1 1 auto; height: auto; min-height: 58dvh; }
 .map-foot { flex: none; margin-top: 0; }
 #mapStatus { flex: none; margin: 0; text-align: center; }
 
@@ -1048,3 +1048,20 @@ body.locked { overflow: hidden; position: fixed; width: 100%; }
 .todo-row.armed .swipe-back { filter: saturate(1.15); }
 .todo-row.swiping .todo-item { transition: none; }
 .todo-row { transition: opacity 0.2s var(--ease); }
+/* the map claims the room its section has, and never keeps a stale size after
+   leaving full screen */
+#mapView { min-height: 0; }
+#mapView.showing .map-wrap:not(.full) { height: auto; }
+.map-wrap:not(.full) { max-height: none; }
+
+/* the date and time fields ease in rather than snapping into place */
+.due-detail {
+  display: grid; grid-template-rows: 1fr; opacity: 1;
+  transition: grid-template-rows 0.32s var(--ease), opacity 0.26s var(--ease), margin-top 0.3s var(--ease);
+}
+.due-detail[hidden] {
+  display: grid !important; grid-template-rows: 0fr; opacity: 0;
+  margin-top: 0; pointer-events: none; overflow: hidden;
+}
+.due-detail > .field { min-height: 0; }
+.due-detail[hidden] > .field { overflow: hidden; }

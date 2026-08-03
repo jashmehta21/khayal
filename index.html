@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=27">
+<link rel="stylesheet" href="app.css?v=28">
 </head>
 <body>
 
@@ -41,7 +41,6 @@
         <textarea id="transcript" placeholder="Bolo ya likho — jo bhi mann mein hai…" rows="4"></textarea>
         <div id="interim" class="interim" aria-live="polite"></div>
       </div>
-      <p class="speak-hint" id="speakHint">Speak any language — Hindi comes out in English letters.</p>
       <div id="workingBox" hidden>
         <div class="working-bar"><i></i></div>
         <p class="working-note" id="workingNote">Polishing your words…</p>
@@ -242,10 +241,7 @@
       <div class="head-row"><h1>Review</h1></div>
       <p class="sub">Keep what matters. Let the rest go.</p>
     </header>
-    <div id="fadingBanner" class="banner" hidden></div>
-    <div id="reviewArea"></div>
-
-    <div class="card" style="margin-top:14px">
+    <div class="card" style="margin-bottom:14px">
       <div class="card-head">
         <div class="micro-label">HOW REVIEW WORKS</div>
         <button id="reviewSettingsToggle" class="chip tiny-chip">Adjust</button>
@@ -274,6 +270,9 @@
         </label>
       </div>
     </div>
+    <div id="fadingBanner" class="banner" hidden></div>
+    <div id="reviewArea"></div>
+
   </section>
 
   <!-- ============ SETTINGS ============ -->
@@ -345,6 +344,18 @@
           <p>The key stays on this device only — it is never uploaded and never stored in the app's code. With smart cleanup on, the words you dictate are sent to Google to be rewritten; everything else in Khayal still stays on your phone.</p>
         </details>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="micro-label">LANGUAGE</div>
+      <p class="note">The language you usually think and speak in. Khayal listens for it, writes it back the same way, and answers you in it.</p>
+      <select id="langSelect" class="field-select"></select>
+      <label class="switch-row" for="romanToggle">
+        <span class="switch-label">Write it in English letters
+          <em>"zindagi" instead of "ज़िंदगी". Turn off to keep your own script.</em>
+        </span>
+        <input type="checkbox" id="romanToggle" class="switch">
+      </label>
     </div>
 
     <div class="card">
@@ -548,7 +559,7 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="mind.js?v=10"></script>
-<script src="app.js?v=23"></script>
+<script src="mind.js?v=11"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>

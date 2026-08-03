@@ -325,17 +325,17 @@ const MapView = (() => {
   let t0 = 0;
 
   const TIER_COLOR = ["#8f89a0", "#8fdfef", "#ffd766"]; // regular, bright cyan, warm gold
-  const TIER_R = [3.2, 5, 7.4];
+  const TIER_R = [2.6, 5.2, 8.6];
 
   let starfield = [];
   function makeStarfield() {
     starfield = [];
     let seed = 9;
     const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 120; i++) {
       starfield.push({
         x: rnd(), y: rnd(), r: rnd() * rnd() * 1.5 + 0.2,
-        a: rnd() * 0.55 + 0.1, tw: rnd() * 1.1 + 0.25, p: rnd() * 6.28,
+        a: rnd() * 0.3 + 0.06, tw: rnd() * 0.6 + 0.2, p: rnd() * 6.28,
       });
     }
   }
@@ -543,16 +543,6 @@ const MapView = (() => {
       ctx.globalAlpha = (dim ? 0.22 : 1) * Math.min(1, 0.35 + p.d * 0.8) * (nd.tier ? shimmer : 1);
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-      // a four-point sparkle on the brightest ones
-      if (nd.tier > 0 && !dim && p.d > 0.55) {
-        const L = r * (nd.tier === 2 ? 3.4 : 2.4) * shimmer;
-        ctx.strokeStyle = nd.tier === 2 ? "rgba(255,225,150,0.55)" : "rgba(190,235,247,0.45)";
-        ctx.lineWidth = Math.max(0.6, r * 0.22);
-        ctx.beginPath();
-        ctx.moveTo(p.x - L, p.y); ctx.lineTo(p.x + L, p.y);
-        ctx.moveTo(p.x, p.y - L); ctx.lineTo(p.x, p.y + L);
-        ctx.stroke();
-      }
       if (isFocus) {
         ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2); ctx.stroke();
@@ -654,7 +644,7 @@ const MapView = (() => {
         const nd = hit(e.clientX - r.left, e.clientY - r.top);
         focusId = nd ? (focusId === nd.id ? null : nd.id) : null;
         showHud(focusId ? nd : null);
-        if (nd) buzz(8);
+        if (nd) buzz(8);   // selection only — Open is a separate, deliberate tap
       }
       // a two-finger horizontal sweep that wasn't a pinch changes view
       if (pinch && Math.abs(pinch.travel || 0) > 70 && (pinch.dz || 0) < 60 && onSweep) {
@@ -767,7 +757,8 @@ Rules:
 - If the khayals don't cover the question, say so plainly and mention what they have written about that is nearest.
 - Refer to them as "you". Be warm, brief and concrete.
 - When you draw on a specific khayal, cite it inline as [1], [2] matching the numbers below.
-- Two short paragraphs at most unless they asked for a list.`;
+- Two short paragraphs at most unless they asked for a list.
+- Reply in the same language they write in. {{LANG}}`;
 
 async function askKhayals(question) {
   const hits = await retrieveFor(question);
@@ -786,7 +777,7 @@ async function askKhayals(question) {
     };
   }
   const text = await chatComplete(
-    `${ASK_PROMPT}\n\nKHAYALS:\n${context}\n\nQUESTION: ${question}`,
+    `${ASK_PROMPT.replace("{{LANG}}", langInstruction())}\n\nKHAYALS:\n${context}\n\nQUESTION: ${question}`,
     { temperature: 0.4, timeout: 25000 }
   );
   // only surface the khayals the answer actually leant on, not everything retrieved

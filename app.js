@@ -81,6 +81,7 @@ function translitWord(w) {
 }
 
 function transliterate(text) {
+  if (typeof romanise === "function" && !romanise()) return text;
   if (!/[ऀ-ॿ]/.test(text)) return text;
   return text.split(/(\s+)/).map((tok) => (/[ऀ-ॿ]/.test(tok) ? translitWord(tok) : tok)).join("");
 }
@@ -147,7 +148,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v23";                      // shown in Settings so we can confirm what's running
+const BUILD = "v24";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a dictation editor. Turn the raw speech below into what the speaker MEANT to write — the way a great human transcriptionist would.
 
@@ -217,7 +218,7 @@ async function chatComplete(prompt, { temperature = 0.2, timeout = SMART_TIMEOUT
 }
 
 async function smartCleanup(text) {
-  return chatComplete(CLEANUP_PROMPT + text);
+  return chatComplete(CLEANUP_PROMPT.replace("{{LANG}}", langInstruction()) + text);
 }
 
 /* A real title, not the first clause: the model reads the whole khayal and
@@ -227,7 +228,7 @@ const TITLE_PROMPT = `Give this personal note a short title: what it is actually
 Rules:
 - 3 to 7 words. No trailing full stop. No quotes around it.
 - Written the way the person would say it, in their own words where possible.
-- If the note mixes Hindi and English, keep Hindi words in English letters.
+- {{LANG}}
 - Capture the point, not the preamble. "Today I wanna basically note down that I need to fix my sleep" is titled "Fixing my sleep", not "Today I wanna basically note down".
 - Reply with the title alone.
 
@@ -235,7 +236,7 @@ Note:
 `;
 
 async function aiTitle(text) {
-  const out = await chatComplete(TITLE_PROMPT + text, { temperature: 0.3, timeout: 12000 });
+  const out = await chatComplete(TITLE_PROMPT.replace("{{LANG}}", langInstruction()) + text, { temperature: 0.3, timeout: 12000 });
   return out.replace(/^["'\s]+|["'.\s]+$/g, "").split("\n")[0].slice(0, 70);
 }
 
@@ -249,9 +250,7 @@ function cloudSttReady() {
     && !!(navigator.mediaDevices && window.MediaRecorder);
 }
 
-const STT_HINT =
-  "Casual spoken notes that mix English and Hindi. Write Hindi words in English letters " +
-  "(Roman script) the way they sound, never in Devanagari. Keep names and technical words intact.";
+const sttHint = () => "Casual spoken notes. " + langInstruction() + " Keep names and technical words intact.";
 
 async function transcribeAudio(blob) {
   const key = smartKey();
@@ -262,7 +261,7 @@ async function transcribeAudio(blob) {
   const fd = new FormData();
   fd.append("file", blob, "speech." + ext);
   fd.append("model", sttModel());
-  fd.append("prompt", STT_HINT);
+  fd.append("prompt", sttHint());
   fd.append("response_format", "json");
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60000);
@@ -698,16 +697,62 @@ function setMode(mode) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recog = null, recording = false, restartTimer = null;
 
-/* No language picker any more. The device engine uses en-IN, which copes with
-   English and Hinglish, and cloud transcription detects the language itself. */
+/* Every scheduled language of India, plus English. The code drives the phone's
+   speech engine; the name is what the models are told to listen for, write and
+   reply in. */
+const LANGUAGES = [
+  ["auto", "Auto — detect for me"],
+  ["en-IN", "English"],
+  ["hi-IN", "Hindi — हिन्दी"],
+  ["bn-IN", "Bengali — বাংলা"],
+  ["mr-IN", "Marathi — मराठी"],
+  ["te-IN", "Telugu — తెలుగు"],
+  ["ta-IN", "Tamil — தமிழ்"],
+  ["gu-IN", "Gujarati — ગુજરાતી"],
+  ["kn-IN", "Kannada — ಕನ್ನಡ"],
+  ["ml-IN", "Malayalam — മലയാളം"],
+  ["pa-IN", "Punjabi — ਪੰਜਾਬੀ"],
+  ["or-IN", "Odia — ଓଡ଼ିଆ"],
+  ["as-IN", "Assamese — অসমীয়া"],
+  ["ur-IN", "Urdu — اردو"],
+  ["sa-IN", "Sanskrit — संस्कृतम्"],
+  ["ks-IN", "Kashmiri — کٲشُر"],
+  ["sd-IN", "Sindhi — سنڌي"],
+  ["kok-IN", "Konkani — कोंकणी"],
+  ["mai-IN", "Maithili — मैथिली"],
+  ["doi-IN", "Dogri — डोगरी"],
+  ["mni-IN", "Manipuri — ꯃꯤꯇꯩꯂꯣꯟ"],
+  ["sat-IN", "Santali — ᱥᱟᱱᱛᱟᱲᱤ"],
+  ["brx-IN", "Bodo — बर'"],
+  ["ne-IN", "Nepali — नेपाली"],
+  ["bho-IN", "Bhojpuri — भोजपुरी"],
+  ["raj-IN", "Rajasthani — राजस्थानी"],
+  ["mag-IN", "Magahi — मगही"],
+  ["tcy-IN", "Tulu — ತುಳು"],
+];
+const langName = () => (LANGUAGES.find(([c]) => c === settings.lang) || LANGUAGES[1])[1].split(" — ")[0];
+const langIsAuto = () => (settings.lang || "en-IN") === "auto";
+const romanise = () => settings.roman !== false;
+
+/* what the models are told about the speaker's language */
+function langInstruction() {
+  const script = romanise()
+    ? "Write it in English letters (Roman script) the way it sounds, never in its own script."
+    : "Write it in its own native script.";
+  return langIsAuto()
+    ? `The speaker may use any language, often mixing it with English. ${script}`
+    : `The speaker's language is ${langName()}, often mixed with English. ${script}`;
+}
+
 function setLang(lang) {
   settings.lang = lang || "en-IN";
   saveSettings();
+  if (recording) { stopRecording(); startRecording(); }
 }
 
 function buildRecognizer() {
   const r = new SR();
-  r.lang = settings.lang || "en-IN";
+  r.lang = langIsAuto() ? "en-IN" : (settings.lang || "en-IN");
   r.continuous = true;
   r.interimResults = true;
   r.onresult = (e) => {
@@ -2194,6 +2239,7 @@ function renderSettings() {
   renderInstallHelp();
   renderNotifState();
   renderSmartState();
+  renderLangState();
   renderSttState();
   renderVersion();
   $("buildLine").textContent = `Khayal · build ${BUILD}`;
@@ -2366,6 +2412,25 @@ $("testKeyBtn").addEventListener("click", async () => {
   } finally {
     $("testKeyBtn").disabled = false;
   }
+});
+
+/* ---- language ---- */
+function renderLangState() {
+  const sel = $("langSelect");
+  if (!sel.options.length) {
+    sel.innerHTML = LANGUAGES.map(([c, n]) => `<option value="${c}">${esc(n)}</option>`).join("");
+  }
+  sel.value = settings.lang || "en-IN";
+  $("romanToggle").checked = romanise();
+}
+$("langSelect").addEventListener("change", (e) => {
+  setLang(e.target.value);
+  toast(langIsAuto() ? "Detecting your language" : langName() + " it is");
+});
+$("romanToggle").addEventListener("change", (e) => {
+  settings.roman = e.target.checked;
+  saveSettings();
+  toast(e.target.checked ? "Writing in English letters" : "Keeping your own script");
 });
 
 /* ---- transcription ---- */
