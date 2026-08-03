@@ -351,7 +351,49 @@ This is where he wants to go, and it solves most of the above.
 
 **Stack: SwiftUI + SwiftData, Xcode on his MacBook, iOS 18+.**
 
-Everything below is **fully on-device**. No server, no account, no cloud.
+### Requirement: full feature parity, AI included
+
+He wants the native app to be **exactly the web app** — every screen, every
+feature, every AI capability listed in §5 — not a reduced offline version.
+
+**What "local" means here.** His data — khayals, to-dos, tiers, review history,
+embeddings — lives only on the device. There is **no account, no sync, no
+server of ours, no analytics**. AI features call **his own API key directly**
+from the device, exactly as the web app does. That is not a violation of local;
+it is the same bargain he already accepted and uses daily.
+
+**Port the provider architecture as-is:**
+
+- Providers: **OpenAI (default)**, Google Gemini, and "custom" with a base URL
+  (covers xAI, Groq, OpenRouter — all speak the OpenAI format).
+- **Never hardcode model names.** `GET {base}/models`, score candidates, try
+  them in turn, remember the winner. See §7 lesson 4 and 7.
+- Store the key in the **Keychain**, not UserDefaults. Never in the export.
+- Every AI call degrades gracefully to the offline path on failure — no key, no
+  network, timeout, quota, bad model. **Nothing may ever be lost or blocked.**
+
+**The five AI features to port, all of them:**
+
+| Feature | Endpoint | Notes |
+|---|---|---|
+| Smart cleanup | `chat/completions` | The full dictation-editor prompt: honour self-correction, collapse restarts, repair mishearings, punctuate, format numbers and money, respect the language setting. Falls back to the rule-based `polish()`. |
+| Cloud transcription | `audio/transcriptions` | Records audio while the device engine shows a live preview; the accurate text replaces it on stop. Falls back to whatever the device heard. |
+| AI titles | `chat/completions` | 3–7 words naming what the note is about. Falls back to `generateTitle()`. |
+| Embeddings | `embeddings` | `text-embedding-3-small`. Powers the constellation, connected khayals, and semantic search. Computed once, stored, reused offline forever. |
+| Ask | `chat/completions` | Retrieval over his khayals, citing only the ones used. |
+
+**Native upgrades worth taking on top** (additions, not replacements):
+
+- **`SFSpeechRecognizer` with `requiresOnDeviceRecognition`** as the free,
+  offline default engine — better than the web's Web Speech API, and it means
+  the app is fully usable with no key at all.
+- **Foundation Models (Apple Intelligence)** as a *third* cleanup option beside
+  OpenAI and Gemini, for users without a key. Requires iPhone 15 Pro or newer —
+  his 17 Pro qualifies, his 14 does not.
+- **`UNUserNotificationCenter`** for real scheduled local reminders that fire
+  when the app is closed. This is the biggest thing the web version cannot do,
+  and it retires the `.ics` calendar workaround.
+- Native gestures, which retire every unresolved swipe complaint in §8.
 
 | Need | Web today | Native answer |
 |---|---|---|
@@ -367,13 +409,18 @@ Everything below is **fully on-device**. No server, no account, no cloud.
 **Migration:** the v3 JSON export maps 1:1 onto SwiftData models. Write the
 importer first — it means he never loses a khayal.
 
-**Suggested order**
-1. Data models + JSON importer. Verify his export loads.
-2. Capture + on-device dictation + local cleanup. The core loop.
-3. Khayals list, search, tiers, detail.
-4. Local notifications + to-dos with native swipe actions.
-5. Review.
-6. Embeddings, Ask, then the constellation last — most wow, most effort.
+**Suggested order** — every stage ends with something working on his phone.
+1. Xcode project, SwiftData models, **JSON importer**. Verify his export loads.
+2. Capture + on-device dictation + rule-based polish. The core loop, no key needed.
+3. Khayals: list, day grouping, search, tiers, detail sheet.
+4. To-dos + **local notifications** + native swipe actions.
+5. Settings: provider, key in Keychain, model discovery, language picker.
+6. **AI layer**: smart cleanup, cloud transcription, AI titles.
+7. Review, with its adjustable schedule.
+8. **Embeddings** → connected khayals → semantic search → **Ask** (its own tab,
+   per §8 item 3).
+9. Constellation last — most wow, most effort. Consider SceneKit for real 3D.
+10. Insights, with the full metric set from §8 item 5.
 
 **Keeping it local:** no CloudKit, no analytics, no network entitlement unless
 he opts into a bring-your-own-key mode. Back up via Files/iCloud Drive export
