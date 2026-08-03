@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Khayal">
 <link rel="preload" href="fonts/jakarta.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=20">
+<link rel="stylesheet" href="app.css?v=21">
 </head>
 <body>
 
@@ -313,6 +313,18 @@
     </div>
 
     <div class="card">
+      <div class="micro-label">TRANSCRIPTION</div>
+      <p class="note">Your phone's built-in speech engine is fast and free, but it mishears words and punctuates badly. Cloud transcription sends the audio to a proper speech model — the same class Wispr Flow uses — then cleans it up.</p>
+      <label class="switch-row" for="cloudSttToggle">
+        <span class="switch-label">Use cloud transcription
+          <em>Far more accurate, much better with Hinglish. Needs your API key.</em>
+        </span>
+        <input type="checkbox" id="cloudSttToggle" class="switch">
+      </label>
+      <p class="note tiny" id="sttStatus"></p>
+    </div>
+
+    <div class="card">
       <div class="micro-label">DICTATION</div>
       <label class="switch-row" for="autoPolishToggle">
         <span class="switch-label">Auto-polish my speech
@@ -355,6 +367,13 @@
       <div class="micro-label">INSTALL</div>
       <p class="note" id="installHelp"></p>
       <button id="installBtn" class="btn dark full" hidden>Install Khayal</button>
+    </div>
+
+    <div class="card">
+      <div class="micro-label">VERSION</div>
+      <div id="versionRows" class="rhythm"></div>
+      <button id="checkUpdateBtn" class="btn light full" style="margin-top:14px">Check for updates</button>
+      <p class="note tiny" id="updateStatus"></p>
     </div>
 
     <div class="card">
@@ -489,6 +508,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="mind.js?v=6"></script>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

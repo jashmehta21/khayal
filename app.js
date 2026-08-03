@@ -147,7 +147,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v18";                      // shown in Settings so we can confirm what's running
+const BUILD = "v19";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
 
@@ -213,6 +213,80 @@ async function chatComplete(prompt, { temperature = 0.2, timeout = SMART_TIMEOUT
 
 async function smartCleanup(text) {
   return chatComplete(CLEANUP_PROMPT + text);
+}
+
+/* ================= cloud transcription =================
+   The phone's own speech engine is quick but mishears and punctuates poorly.
+   Recording the audio and sending it to a real speech model is what closes the
+   gap to a tool like Wispr Flow. OpenAI-format providers only. */
+function sttModel() { return localStorage.getItem("khayal-stt-model") || "whisper-1"; }
+function cloudSttReady() {
+  return settings.cloudStt === true && !!smartKey() && smartProvider() !== "gemini"
+    && !!(navigator.mediaDevices && window.MediaRecorder);
+}
+
+const STT_HINT =
+  "Casual spoken notes that mix English and Hindi. Write Hindi words in English letters " +
+  "(Roman script) the way they sound, never in Devanagari. Keep names and technical words intact.";
+
+async function transcribeAudio(blob) {
+  const key = smartKey();
+  if (!key) throw new Error("No API key");
+  const type = blob.type || "";
+  const ext = /mp4|m4a|aac/.test(type) ? "mp4" : /webm/.test(type) ? "webm"
+    : /ogg/.test(type) ? "ogg" : /wav/.test(type) ? "wav" : "mp4";
+  const fd = new FormData();
+  fd.append("file", blob, "speech." + ext);
+  fd.append("model", sttModel());
+  fd.append("prompt", STT_HINT);
+  fd.append("response_format", "json");
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60000);
+  try {
+    const res = await fetch(`${smartBase()}/audio/transcriptions`, {
+      method: "POST", headers: { Authorization: "Bearer " + key }, signal: ctrl.signal, body: fd,
+    });
+    if (!res.ok) {
+      let d = ""; try { d = (await res.json()).error?.message || ""; } catch (_) {}
+      throw new Error(friendlyApiError(res.status, d));
+    }
+    const data = await res.json();
+    const text = (data.text || "").trim();
+    if (!text) throw new Error("Nothing was heard");
+    return text;
+  } finally { clearTimeout(timer); }
+}
+
+/* raw audio capture, running alongside the live on-device preview */
+let mediaRec = null, audioChunks = [], micStream = null;
+async function startAudioCapture() {
+  if (!cloudSttReady()) return false;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
+      .find((m) => window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
+    mediaRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+    audioChunks = [];
+    mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) audioChunks.push(e.data); };
+    mediaRec.start();
+    return true;
+  } catch (_) { releaseMic(); return false; }
+}
+function releaseMic() {
+  if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+  mediaRec = null;
+}
+function stopAudioCapture() {
+  return new Promise((resolve) => {
+    if (!mediaRec || mediaRec.state === "inactive") { releaseMic(); return resolve(null); }
+    const type = mediaRec.mimeType;
+    mediaRec.onstop = () => {
+      const blob = audioChunks.length ? new Blob(audioChunks, { type }) : null;
+      releaseMic();
+      resolve(blob);
+    };
+    try { mediaRec.stop(); } catch (_) { releaseMic(); resolve(null); }
+  });
 }
 
 function friendlyApiError(status, detail) {
@@ -635,21 +709,63 @@ function startRecording() {
     recog.start();
     recording = true;
     lastFinalAt = 0;
+    dictationBase = $("transcript").value;   // so cloud text replaces only what was dictated
     buzz(12);
     acquireWakeLock();
+    startAudioCapture();                     // records in parallel with the live preview
     updateMicUI();
   } catch (_) { $("micHint").textContent = "Couldn't start the mic — try again"; }
 }
+let dictationBase = "";
+
 function stopRecording({ cleanup = false } = {}) {
+  const wasCloud = cloudSttReady() && !!mediaRec;
   recording = false;
   clearTimeout(restartTimer);
   if (recog) { try { recog.stop(); } catch (_) {} }
   $("interim").textContent = "";
   releaseWakeLock();
   updateMicUI();
+
+  if (wasCloud) { finishCloudDictation(cleanup); return; }
+  releaseMic();
   // finishing a dictation is exactly when the rewrite should happen
   if (cleanup && smartEnabled() && $("transcript").value.trim()) {
     setTimeout(() => runCleanup({ silent: true }), 250); // let the last result land
+  }
+}
+
+/* Swap the rough on-device preview for the accurate transcription, then clean
+   it up. Any failure quietly keeps whatever the phone already heard. */
+async function finishCloudDictation(cleanup) {
+  const ta = $("transcript");
+  $("micHint").textContent = "Transcribing…";
+  cleaning = true;
+  $("polishBtn").disabled = true;
+  try {
+    const blob = await stopAudioCapture();
+    if (!blob || blob.size < 1200) throw new Error("Nothing recorded");
+    let text = transliterate(await transcribeAudio(blob));
+    if (cleanup && smartEnabled()) {
+      $("micHint").textContent = "Tidying up your words…";
+      try { text = await smartCleanup(text); } catch (_) { text = polish(text); }
+    } else {
+      text = polish(text);
+    }
+    const base = dictationBase.trim();
+    ta.value = (base ? base + "\n\n" : "") + text;
+    onTranscriptInput();
+    buzz(12);
+  } catch (err) {
+    releaseMic();
+    const msg = err.name === "AbortError" ? "Transcription timed out" : err.message;
+    // the device transcript is already in the box, so nothing is lost
+    if (cleanup && smartEnabled() && ta.value.trim()) { await runCleanup({ silent: true }); }
+    toast(msg + " — kept what your phone heard");
+  } finally {
+    cleaning = false;
+    $("polishBtn").disabled = false;
+    if (!recording) $("micHint").textContent = "Tap to speak";
   }
 }
 function updateMicUI() {
@@ -1762,7 +1878,9 @@ function renderSettings() {
   renderInstallHelp();
   renderNotifState();
   renderSmartState();
-  $("buildLine").textContent = `Build ${BUILD}`;
+  renderSttState();
+  renderVersion();
+  $("buildLine").textContent = `Khayal · build ${BUILD}`;
 }
 function renderTrash() {
   const list = $("trashList");
@@ -1931,6 +2049,76 @@ $("testKeyBtn").addEventListener("click", async () => {
     toast("Test failed");
   } finally {
     $("testKeyBtn").disabled = false;
+  }
+});
+
+/* ---- transcription ---- */
+function renderSttState() {
+  $("cloudSttToggle").checked = settings.cloudStt === true;
+  const s = $("sttStatus");
+  if (!smartKey()) { s.textContent = "Add an API key above to switch this on."; return; }
+  if (smartProvider() === "gemini") {
+    s.textContent = "Cloud transcription needs an OpenAI-format provider. Your phone's engine is being used.";
+    return;
+  }
+  if (!(navigator.mediaDevices && window.MediaRecorder)) {
+    s.textContent = "This browser can't record audio, so the phone's engine is being used.";
+    return;
+  }
+  s.textContent = settings.cloudStt === true
+    ? `On, using ${sttModel()}. Your phone still shows a live preview while you speak; the accurate version replaces it when you stop.`
+    : "Off — using your phone's built-in engine.";
+}
+$("cloudSttToggle").addEventListener("change", async (e) => {
+  settings.cloudStt = e.target.checked;
+  saveSettings();
+  if (e.target.checked && smartKey() && smartProvider() !== "gemini") {
+    try {
+      const { all } = await listModels();
+      const stt = all.filter((id) => /whisper|transcribe/i.test(id));
+      const best = stt.sort((a, b) =>
+        (/mini/i.test(b) ? 2 : 0) + (/4o|gpt/i.test(b) ? 3 : 0) -
+        ((/mini/i.test(a) ? 2 : 0) + (/4o|gpt/i.test(a) ? 3 : 0)))[0];
+      if (best) localStorage.setItem("khayal-stt-model", best);
+    } catch (_) {}
+  }
+  renderSttState();
+  toast(e.target.checked ? "Cloud transcription on" : "Using phone engine");
+});
+
+/* ---- version ---- */
+function renderVersion() {
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const rows = [
+    ["App build", BUILD],
+    ["Offline cache", localStorage.getItem("khayal-sw") || "—"],
+    ["Installed", standalone ? "Yes, as an app" : "No, running in a browser"],
+    ["Khayals stored", String(thoughts.length)],
+    ["To-dos stored", String(todos.length)],
+  ];
+  $("versionRows").innerHTML = rows.map(([k, v]) =>
+    `<div class="rhythm-row"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join("");
+}
+$("checkUpdateBtn").addEventListener("click", async () => {
+  $("updateStatus").textContent = "Checking…";
+  try {
+    const res = await fetch("index.html?cb=" + Date.now(), { cache: "no-store" });
+    const html = await res.text();
+    const m = /app\.js\?v=(\d+)/.exec(html);
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) await reg.update();
+    const live = m ? m[1] : null;
+    const mine = /app\.js\?v=(\d+)/.exec(document.documentElement.innerHTML);
+    const here = mine ? mine[1] : null;
+    if (live && here && live !== here) {
+      $("updateStatus").textContent = `A newer version is ready. Close Khayal completely and reopen to get it.`;
+      toast("Update available");
+    } else {
+      $("updateStatus").textContent = "You're on the latest version.";
+      toast("Up to date");
+    }
+  } catch (_) {
+    $("updateStatus").textContent = "Couldn't check — you may be offline.";
   }
 });
 
@@ -2167,6 +2355,7 @@ async function cleanOldTrash() {
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
+    caches.keys().then((k) => { if (k[0]) localStorage.setItem("khayal-sw", k[0]); }).catch(() => {});
   }
   catchUpReminders();
   scheduleReminders();
