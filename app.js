@@ -147,7 +147,7 @@ function polish(text) {
    polish() above if it's off, keyless, slow or failing. */
 const SMART_TIMEOUT = 15000;
 const DEFAULT_MODEL = "gemini-2.5-flash"; // only a starting guess; discovery replaces it
-const BUILD = "v16";                      // shown in Settings so we can confirm what's running
+const BUILD = "v18";                      // shown in Settings so we can confirm what's running
 
 const CLEANUP_PROMPT = `You are a transcription editor. Rewrite the dictated text below so it reads as if it were carefully written, without changing what the speaker said.
 
@@ -430,11 +430,11 @@ let toastTimer;
 function toast(msg, onTap) {
   const el = $("toast");
   el.textContent = msg;
-  el.hidden = false;
+  showLayer(el);
   el.classList.toggle("tappable", !!onTap);
-  el.onclick = onTap ? () => { el.hidden = true; clearTimeout(toastTimer); onTap(); } : null;
+  el.onclick = onTap ? () => { hideLayer(el); clearTimeout(toastTimer); onTap(); } : null;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), onTap ? 6500 : 1900);
+  toastTimer = setTimeout(() => hideLayer(el), onTap ? 6500 : 1900);
 }
 
 /* animated number counter — always lands on the exact value, even if the
@@ -453,6 +453,39 @@ function countUp(el, to, dur = 750, suffix = "") {
   };
   requestAnimationFrame(step);
   el._countTimer = setTimeout(settle, dur + 60);
+}
+
+/* Show/hide an overlay. The .open class is added on the next frame so the
+   transition has a start state to animate from — and again on a timer, so if
+   animation frames never arrive the layer still opens. */
+function showLayer(el) {
+  if (!el) return;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add("open"));
+  clearTimeout(el._openTimer);
+  el._openTimer = setTimeout(() => el.classList.add("open"), 60);
+}
+function hideLayer(el) {
+  if (!el) return;
+  clearTimeout(el._openTimer);
+  el.classList.remove("open");
+  el.hidden = true;
+}
+
+/* Stagger a freshly rendered list, with a guarantee that it becomes visible
+   whether or not the animation ever runs. setTimeout keeps working when
+   animation frames don't, so this can't leave content hidden. */
+function staggerIn(container, selector, step = 35, cap = 400) {
+  if (!container) return;
+  const els = [...container.querySelectorAll(selector)];
+  if (!els.length) return;
+  if (settings.motion === false) { els.forEach((el) => el.classList.add("entered")); return; }
+  els.forEach((el, i) => { el.style.animationDelay = Math.min(i * step, cap) + "ms"; });
+  clearTimeout(container._settleTimer);
+  container._settleTimer = setTimeout(
+    () => els.forEach((el) => el.classList.add("entered")),
+    cap + 700
+  );
 }
 
 /* ripple origin for buttons */
@@ -883,12 +916,7 @@ function renderTodos() {
       ${s.items.map(todoItemHTML).join("")}
     </div>`).join("");
 
-  // stagger the entrance so the list assembles rather than snaps in
-  if (settings.motion !== false) {
-    list.querySelectorAll(".todo-item").forEach((el, i) => {
-      el.style.animationDelay = Math.min(i * 0.035, 0.4) + "s";
-    });
-  }
+  staggerIn(list, ".todo-item");
 
   list.querySelectorAll(".tcheck").forEach((btn) =>
     btn.addEventListener("click", async (e) => {
@@ -957,7 +985,7 @@ function openTodo(id) {
     $("tDueTime").value = new Date(t.dueAt).toTimeString().slice(0, 5);
   } else { $("tDueDate").value = ""; $("tDueTime").value = "09:00"; }
   $("todoIcs").hidden = !has;
-  $("todoSheetBackdrop").hidden = false;
+  showLayer($("todoSheetBackdrop"));
 }
 document.querySelectorAll(".tdue-chip").forEach((c) =>
   c.addEventListener("click", () => {
@@ -974,7 +1002,7 @@ document.querySelectorAll(".tdue-chip").forEach((c) =>
     }
   })
 );
-function closeTodoSheet() { $("todoSheetBackdrop").hidden = true; todoId = null; }
+function closeTodoSheet() { hideLayer($("todoSheetBackdrop")); todoId = null; }
 $("todoClose").addEventListener("click", closeTodoSheet);
 $("todoSheetBackdrop").addEventListener("click", (e) => {
   if (e.target === $("todoSheetBackdrop")) closeTodoSheet();
@@ -1228,11 +1256,7 @@ function renderList() {
     html += thoughtCardHTML(t, tokens);
   }
   list.innerHTML = html;
-  if (settings.motion !== false) {
-    list.querySelectorAll(".thought-card").forEach((el, i) => {
-      el.style.animationDelay = Math.min(i * 0.03, 0.35) + "s";
-    });
-  }
+  staggerIn(list, ".thought-card", 30, 350);
   list.querySelectorAll(".thought-card").forEach((el) =>
     el.addEventListener("click", () => openDetail(el.dataset.id)));
 }
@@ -1414,6 +1438,7 @@ function renderHeatmap(counts) {
     cells += `<div class="heat-col">${col}</div>`;
   }
   $("heatScroll").innerHTML = `<div class="heat-inner"><div class="heat-months">${months}</div><div class="heat-grid">${cells}</div></div>`;
+  staggerIn($("heatScroll"), ".heat-cell", 0, 0);
   // tapping a day in the heatmap jumps straight to that day's memories
   $("heatScroll").querySelectorAll(".heat-cell[data-day]").forEach((el) =>
     el.addEventListener("click", () => {
@@ -1570,7 +1595,7 @@ function openDetail(id) {
   $("detailMeta").textContent = `Created ${relTime(t.createdAt)} · reviewed ${t.reviewCount || 0}×`;
   updateTierChips();
   renderRelated(t);
-  $("sheetBackdrop").hidden = false;
+  showLayer($("sheetBackdrop"));
 }
 
 /* the connections, shown where they're actually useful: on the khayal itself */
@@ -1598,7 +1623,7 @@ document.querySelectorAll(".tier-chip").forEach((c) =>
   c.addEventListener("click", () => { detailTier = Number(c.dataset.tier); buzz(8); updateTierChips(); }));
 $("detailClose").addEventListener("click", closeDetail);
 $("sheetBackdrop").addEventListener("click", (e) => { if (e.target === $("sheetBackdrop")) closeDetail(); });
-function closeDetail() { $("sheetBackdrop").hidden = true; detailId = null; }
+function closeDetail() { hideLayer($("sheetBackdrop")); detailId = null; }
 
 $("detailPolish").addEventListener("click", () => {
   const ta = $("detailText");
@@ -1698,6 +1723,7 @@ function renderReviewCard() {
       <button class="btn keep" id="rvKeep">Keep</button>
       <button class="btn promote" id="rvPromote">${t.tier >= 2 ? "Core ✓" : t.tier === 1 ? "Make Core" : "Make High"}</button>
     </div>`;
+  staggerIn(area, ".review-card", 0, 0);
   $("rvPurge").addEventListener("click", async () => {
     if (t.tier === 2 && !confirm("This is a Core khayal. Purge it anyway?")) return;
     await purgeThought(t); nextReview();
@@ -2006,14 +2032,14 @@ $("mapRelink").addEventListener("click", async () => {
 
 /* ================= ask ================= */
 function openChat() {
-  $("chatBackdrop").hidden = false;
+  showLayer($("chatBackdrop"));
   $("chatSub").textContent = smartKey()
     ? "Answers come only from what you've written."
     : "Add a free key in Settings to talk. Without one I'll still find the closest khayals.";
   if (!chatHistory.length) renderChat();
   setTimeout(() => $("chatInput").focus(), 250);
 }
-function closeChat() { $("chatBackdrop").hidden = true; }
+function closeChat() { hideLayer($("chatBackdrop")); }
 $("askBtn").addEventListener("click", () => { buzz(8); openChat(); });
 $("chatClose").addEventListener("click", closeChat);
 $("chatBackdrop").addEventListener("click", (e) => { if (e.target === $("chatBackdrop")) closeChat(); });
@@ -2040,6 +2066,7 @@ function renderChat() {
       : "";
     return `<div class="msg bot">${esc(m.text).replace(/\n/g, "<br>")}${cites}</div>`;
   }).join("");
+  staggerIn(log, ".msg", 0, 0);
   log.querySelectorAll(".cite").forEach((el) =>
     el.addEventListener("click", () => { closeChat(); openDetail(el.dataset.id); }));
   log.scrollTop = log.scrollHeight;
@@ -2078,7 +2105,7 @@ $("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendC
 
 /* ================= onboarding ================= */
 $("onboardDone").addEventListener("click", () => {
-  settings.onboarded = true; saveSettings(); $("onboard").hidden = true;
+  settings.onboarded = true; saveSettings(); hideLayer($("onboard"));
   moveAllThumbs();
 });
 
@@ -2136,7 +2163,7 @@ async function cleanOldTrash() {
   updateBadges();
   moveAllThumbs();
 
-  if (!settings.onboarded) $("onboard").hidden = false;
+  if (!settings.onboarded) showLayer($("onboard"));
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});

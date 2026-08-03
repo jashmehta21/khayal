@@ -60,23 +60,22 @@ html, body {
   padding: calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(var(--tabbar-total) + 26px);
 }
 
+/* Entrance animations are decoration, never the thing that makes content
+   visible. If the animation timeline stalls (backgrounded tab, throttling,
+   low power) a staggered item would otherwise sit at opacity 0 forever, so a
+   timer stamps .entered on anything that hasn't finished and hands it back to
+   its natural, visible styles. */
+.entered { animation: none !important; opacity: 1 !important; transform: none !important; }
+
 /* ---------- screens & transitions ---------- */
 .screen { display: none; }
-.screen.active { display: block; animation: screenIn 0.42s var(--ease) both; }
+.screen.active { display: block; animation: screenIn 0.42s var(--ease); }
 @keyframes screenIn {
   from { opacity: 0; transform: translateY(10px) scale(0.995); }
   to { opacity: 1; transform: none; }
 }
 
 /* children cascade in, so a screen assembles itself */
-.screen.active > * { animation: riseIn 0.5s var(--ease) both; }
-.screen.active > *:nth-child(1) { animation-delay: 0.02s; }
-.screen.active > *:nth-child(2) { animation-delay: 0.06s; }
-.screen.active > *:nth-child(3) { animation-delay: 0.1s; }
-.screen.active > *:nth-child(4) { animation-delay: 0.14s; }
-.screen.active > *:nth-child(5) { animation-delay: 0.18s; }
-.screen.active > *:nth-child(6) { animation-delay: 0.22s; }
-.screen.active > *:nth-child(n+7) { animation-delay: 0.26s; }
 @keyframes riseIn {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
@@ -184,7 +183,15 @@ h3 { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.02em; }
 }
 
 /* ---------- capture ---------- */
-.compose-card { padding-bottom: 16px; }
+/* fills the screen instead of stranding the mic above a void */
+#screen-capture.active {
+  display: flex; flex-direction: column;
+  min-height: calc(100dvh - env(safe-area-inset-top, 0px) - var(--tabbar-total) - 46px);
+}
+.compose-card { padding-bottom: 16px; display: flex; flex-direction: column; flex: 1; min-height: 150px; }
+.compose-card .transcript-wrap { flex: 1; display: flex; flex-direction: column; }
+.compose-card #transcript { flex: 1; }
+.mic-zone { flex: none; }
 .transcript-wrap { position: relative; margin-top: 8px; }
 #transcript, #detailText, #todoText {
   width: 100%; resize: none; border: none; outline: none;
@@ -317,7 +324,6 @@ h3 { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.02em; }
   display: flex; align-items: flex-start; gap: 12px;
   background: var(--card); border-radius: var(--r-inner);
   padding: 14px 15px; margin-bottom: 8px; cursor: pointer;
-  animation: itemIn 0.45s var(--ease) both;
   transition: transform 0.2s var(--ease), opacity 0.3s, background 0.2s;
 }
 @keyframes itemIn {
@@ -386,7 +392,6 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .thought-card {
   background: var(--card); border-radius: var(--r-inner); padding: 15px 16px;
   cursor: pointer; border-left: 5px solid transparent;
-  animation: itemIn 0.45s var(--ease) both;
   transition: transform 0.2s var(--ease);
 }
 .thought-card:active { transform: scale(0.985); }
@@ -479,7 +484,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 
 .month-wrap {
   margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
-  animation: monthOpen 0.34s var(--ease) both;
+  animation: monthOpen 0.34s var(--ease);
 }
 @keyframes monthOpen {
   from { opacity: 0; transform: translateY(-6px); }
@@ -517,7 +522,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   border-radius: 18px; padding: 14px 15px;
   box-shadow: 0 8px 26px rgba(20,18,15,0.14);
-  animation: riseIn 0.3s var(--ease) both;
+  opacity: 0; transform: translateY(10px); transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
 }
 .hud-title { font-size: 0.98rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.35; }
 .hud-meta { color: var(--muted); font-size: 0.76rem; font-weight: 600; margin-top: 4px; }
@@ -568,7 +573,6 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .msg {
   max-width: 88%; padding: 12px 15px; border-radius: 18px;
   font-size: 0.94rem; line-height: 1.55; font-weight: 500;
-  animation: riseIn 0.34s var(--ease) both;
 }
 .msg.you { align-self: flex-end; background: var(--dark); color: #fff; border-bottom-right-radius: 6px; font-weight: 600; }
 .msg.bot { align-self: flex-start; background: var(--card); border-bottom-left-radius: 6px; }
@@ -636,7 +640,6 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .heat-cell {
   width: 13px; height: 13px; border-radius: 4px; display: block; cursor: pointer;
   transition: transform 0.2s var(--spring), box-shadow 0.2s;
-  animation: cellIn 0.4s var(--ease) both;
 }
 @keyframes cellIn { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
 .heat-cell.empty { background: transparent; cursor: default; animation: none; }
@@ -677,7 +680,6 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .review-card {
   position: relative; z-index: 1; background: var(--card);
   border-radius: var(--r-card); padding: 26px 22px;
-  animation: cardIn 0.5s var(--spring) both;
 }
 @keyframes cardIn { from { opacity: 0; transform: scale(0.94) translateY(12px); } to { opacity: 1; transform: none; } }
 .review-card .thought-title { -webkit-line-clamp: 14; font-size: 1.1rem; line-height: 1.55; font-weight: 600; }
@@ -786,7 +788,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .dot {
   position: absolute; top: 9px; right: 10px; width: 7px; height: 7px;
   border-radius: 50%; background: var(--accent);
-  animation: pop 0.4s var(--spring) both;
+  animation: pop 0.4s var(--spring);
 }
 .tab.active .dot { background: #fff; }
 @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
@@ -796,14 +798,14 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
   position: fixed; inset: 0; background: rgba(20,18,15,0.4);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   z-index: 100; display: flex; align-items: flex-end; justify-content: center;
-  animation: fadeIn 0.3s var(--ease) both;
+  opacity: 0; transition: opacity 0.3s var(--ease);
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .sheet {
   width: 100%; max-width: 520px; background: var(--bg);
   border-radius: 30px 30px 0 0; padding: 12px 18px calc(20px + var(--safe-b));
   display: flex; flex-direction: column; gap: 10px;
-  animation: sheetUp 0.44s var(--ease) both;
+  transform: translateY(100%); transition: transform 0.44s var(--ease);
   max-height: 92dvh; overflow-y: auto;
 }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
@@ -835,12 +837,12 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
 .onboard {
   position: fixed; inset: 0; z-index: 200; background: var(--bg);
   display: flex; align-items: center; justify-content: center; padding: 22px;
-  animation: fadeIn 0.4s var(--ease) both;
+  opacity: 0; transition: opacity 0.35s var(--ease);
 }
 .onboard-card {
   background: var(--card); border-radius: 30px; padding: 32px 24px;
   max-width: 420px; display: flex; flex-direction: column; gap: 14px;
-  animation: cardIn 0.6s var(--spring) both;
+  transform: scale(0.94); opacity: 0; transition: transform 0.5s var(--spring), opacity 0.35s var(--ease);
 }
 .onboard-mark {
   width: 56px; height: 56px; border-radius: 20px; margin: 0 auto;
@@ -862,7 +864,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 4px;
   background: var(--dark); color: #fff; border-radius: var(--pill);
   padding: 13px 22px; font-size: 0.88rem; font-weight: 700; letter-spacing: -0.01em;
   z-index: 150; white-space: nowrap; box-shadow: 0 10px 30px rgba(20,18,15,0.24);
-  animation: toastIn 0.44s var(--spring) both;
+  opacity: 0; transition: opacity 0.28s var(--ease), transform 0.34s var(--spring);
 }
 @keyframes toastIn {
   from { opacity: 0; transform: translate(-50%, 18px) scale(0.9); }
@@ -889,3 +891,14 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
   .chip:hover { border-color: var(--ink); }
   .icon-btn:hover { background: var(--card-2); }
 }
+
+/* Layers reveal via transitions, not keyframes: a transition that cannot run
+   lands on its final (visible) state, whereas a stalled animation would hold
+   its hidden first frame forever. */
+.sheet-backdrop.open { opacity: 1; }
+.sheet-backdrop.open .sheet { transform: none; }
+.onboard.open { opacity: 1; }
+.onboard.open .onboard-card { transform: none; opacity: 1; }
+.map-hud.open { opacity: 1; transform: none; }
+.toast { transform: translate(-50%, 14px); }
+.toast.open { opacity: 1; transform: translate(-50%, 0); }

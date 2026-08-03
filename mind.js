@@ -526,15 +526,15 @@ const MapView = (() => {
 
   function showHud(nd) {
     const hud = document.getElementById("mapHud");
-    if (!nd) { hud.hidden = true; return; }
+    if (!nd) { hideLayer(hud); return; }
     const t = thoughts.find((x) => x.id === nd.id);
-    if (!t) { hud.hidden = true; return; }
+    if (!t) { hideLayer(hud); return; }
     const linked = links.filter((e) => e.a === nd.id || e.b === nd.id).length;
     document.getElementById("hudTitle").textContent = t.title || generateTitle(t.text);
     document.getElementById("hudMeta").textContent =
       `${["Regular", "High", "Core"][t.tier]} · ${relTime(t.createdAt)} · ${linked} connection${linked === 1 ? "" : "s"}`;
     document.getElementById("hudOpen").onclick = () => openDetail(nd.id);
-    hud.hidden = false;
+    showLayer(hud);
   }
 
   function bindGestures() {
@@ -579,14 +579,14 @@ const MapView = (() => {
       empty.innerHTML = `<div class="empty-state"><span class="big">✦</span>Your map appears once you have a few khayals.<br>Keep catching them.</div>`;
       stop();
       ctx && ctx.clearRect(0, 0, W, H);
-      document.getElementById("mapHud").hidden = true;
+      hideLayer(document.getElementById("mapHud"));
       updateStatus();
       return;
     }
     empty.hidden = true;
     build();
     focusId = null;
-    document.getElementById("mapHud").hidden = true;
+    hideLayer(document.getElementById("mapHud"));
     running = true; t0 = 0;
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(draw);
